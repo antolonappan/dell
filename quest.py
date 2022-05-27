@@ -60,7 +60,7 @@ class RecoBase:
         self.phi_sim_dir = phi_sim_dir
         self.phi_sim_pre = phi_sim_prefix
         self.FG = FG
-        self.bin = nmt.bins.NmtBin.from_lmax_linear(self.Lmax,10)
+        self.bin = nmt.bins.NmtBin.from_lmax_linear(self.Lmax,30)
         self.B = self.bin.get_effective_ells()
 
     @property
@@ -199,7 +199,7 @@ class RecoBase:
     def get_cl_phi_inXout(self,idx):
         almi = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,hp.alm2map(self.get_input_phi_sim(idx),self.nside))
         almo = self.get_qlm_sim(idx)
-        
+
         return cs.utils.alm2cl(self.Lmax,almi,almo)/self.fsky
 
     def plot_input_sim(self,idx):
@@ -244,17 +244,22 @@ class RecoBase:
         plt.loglog(self.L,self.Lfac*theory)
         plt.errorbar(self.B,cl.mean(axis=0),yerr=cl.std(axis=0),fmt='o')
 
-    def SNR(self,n=100):
+    def SNR(self,n=100,use_offdiag=True):
         stat = self.input_stat(n)
         input_mean = stat['mean']
         input_cov = stat['cov']
+        e = np.linalg.eigvals(input_cov)
+        if not np.all(e > 0):
+            print('covariance is not positive-definite')
+        if not use_offdiag:
+            cov = np.zeros(input_cov.shape)
+            np.fill_diagonal(cov, np.diag(input_cov))
+            input_cov = cov
         inv_cov = np.linalg.inv(input_cov)
 
         a_b = input_mean * np.dot(inv_cov,input_mean)
 
         select = np.where((self.B > 20) & (self.B < 200))[0]
-
-
         al_phi = []
         for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
             output_cl = self.bin.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm)
@@ -265,20 +270,37 @@ class RecoBase:
 
     def response(self,idx):
         return self.get_cl_phi_inXout(idx)/self.cl_unl['pp'][:self.Lmax+1]
-    
+
     def plot_var(self,n=100):
         output_cl = []
         for idx in tqdm(range(n),desc='Calculating var',unit='realisation'):
             output_cl.append(self.bin.bin_cell((self.get_qcl_sim(idx)/self.fsky)))
         sim_var = np.var(np.array(output_cl),axis=0)
-        
-        cl_pp = self.bin.bin_cell(self.cl_unl['pp'][:self.Lmax+1] + self.norm)
+
+        cl_pp = self.bin.bin_cell((self.cl_unl['pp'][:self.Lmax+1] + self.norm))
         f = (2*self.fsky)/(((2*self.B) + 1)*10)
         tru_var = f * cl_pp**2
-        
-        plt.loglog(self.B,tru_var,label='anal')
-        plt.loglog(self.B,sim_var,label='sim')
+        plt.plot(self.B,sim_var/tru_var,label='sim/anal')
+        plt.ylim(0,3)
+        plt.xlim(0,250)
+
+        #plt.loglog(self.B,tru_var,label='anal')
+        #plt.loglog(self.B,sim_var,label='sim')
         plt.legend()
+
+    def get_temp_corr(self,idx):
+        Plm = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,
+                            hp.alm2map(self.__get_input_phi_sim__(idx),
+                                       self.nside))
+        Tlm = cs.utils.gauss2alm_const(self.lmax,self.cl_unl['pp'],
+                                       self.cl_unl_ar[2,:],self.cl_unl_ar[3,:],Plm)
+        del Plm
+        tmap = cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,Tlm)*self.mask
+        del Tlm
+        Tlm = cs.utils.hp_map2alm(self.Lmax,self.Lmax,tmap)
+        Plm = self.get_qlm_sim(idx)
+        return cs.utils.alm2cl(self.Lmax,Tlm,Plm)
+
 
 
 
