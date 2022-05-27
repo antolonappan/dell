@@ -182,13 +182,24 @@ class RecoBase:
         fname = os.path.join(self.phi_sim_dir,f"{self.phi_sim_pre}{idx:04d}.fits")
         return hp.read_alm(fname)
 
+    def get_kappa_alm_inp_sim(self,idx):
+        fl = self.L * (self.L + 1)/2
+        return hp.almxfl(self.__get_input_phi_sim__(idx),fl)
+
+    def get_kappa_map_inp_sim(self,idx):
+        return hp.alm2map(self.get_kappa_alm_inp_sim(idx),nside=self.nside)*self.mask
+
     def get_input_phi_sim(self,idx):
-        phi_map = hp.alm2map(self.__get_input_phi_sim__(idx),self.nside)#*self.mask
-        return cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,phi_map)
+        fl = 2/(self.L * (self.L + 1))
+        klm = hp.map2alm(self.get_kappa_map_inp_sim(idx))
+        hp.almxfl(klm,fl,inplace=True)
+        klm[0] = 0
+        return klm
 
     def get_cl_phi_inXout(self,idx):
-        almi = self.get_input_phi_sim(idx)
+        almi = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,hp.alm2map(self.get_input_phi_sim(idx),self.nside))
         almo = self.get_qlm_sim(idx)
+        
         return cs.utils.alm2cl(self.Lmax,almi,almo)/self.fsky
 
     def plot_input_sim(self,idx):
@@ -196,7 +207,7 @@ class RecoBase:
         plt.figure(figsize=(8,8))
         plt.loglog(self.L,self.Lfac*theory)
         almi = self.get_input_phi_sim(idx)
-        plt.loglog(self.L,self.Lfac*cs.utils.alm2cl(self.Lmax,almi)) #/self.fsky
+        plt.loglog(self.L,self.Lfac*hp.alm2cl(almi,lmax_out=self.Lmax)/self.fsky)
 
     def plot_inXout(self,idx):
         theory = self.cl_unl['pp'][:self.Lmax+1]
@@ -214,7 +225,7 @@ class RecoBase:
                 cl = hp.alm2cl(self.__get_input_phi_sim__(i),lmax_out=self.Lmax)
                 arr.append(self.bin.bin_cell(cl))
             arr = np.array(arr)
-            
+
             stat = {}
             stat['mean'] = arr.mean(axis=0)
             stat['cov'] = np.cov(arr.T)
@@ -226,7 +237,7 @@ class RecoBase:
         cl = []
         for idx in tqdm(range(100),desc='Calculating reconstruction stat',unit='realisation'):
             cl.append(self.bin.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm)))
-            
+
         cl = np.array(cl)
         theory = self.cl_unl['pp'][:self.Lmax+1]
         plt.figure(figsize=(8,8))
@@ -238,11 +249,11 @@ class RecoBase:
         input_mean = stat['mean']
         input_cov = stat['cov']
         inv_cov = np.linalg.inv(input_cov)
-        
+
         a_b = input_mean * np.dot(inv_cov,input_mean)
-        
+
         select = np.where((self.B > 20) & (self.B < 200))[0]
-        
+
 
         al_phi = []
         for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
@@ -254,6 +265,20 @@ class RecoBase:
 
     def response(self,idx):
         return self.get_cl_phi_inXout(idx)/self.cl_unl['pp'][:self.Lmax+1]
+    
+    def plot_var(self,n=100):
+        output_cl = []
+        for idx in tqdm(range(n),desc='Calculating var',unit='realisation'):
+            output_cl.append(self.bin.bin_cell((self.get_qcl_sim(idx)/self.fsky)))
+        sim_var = np.var(np.array(output_cl),axis=0)
+        
+        cl_pp = self.bin.bin_cell(self.cl_unl['pp'][:self.Lmax+1] + self.norm)
+        f = (2*self.fsky)/(((2*self.B) + 1)*10)
+        tru_var = f * cl_pp**2
+        
+        plt.loglog(self.B,tru_var,label='anal')
+        plt.loglog(self.B,sim_var,label='sim')
+        plt.legend()
 
 
 
