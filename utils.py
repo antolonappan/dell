@@ -1,4 +1,21 @@
 import numpy as np
+from functools import wraps
+import time
+import hashlib
+
+def timing(f):
+    @wraps(f)
+    def wrap(*args, **kw):
+        ts = time.time()
+        result = f(*args, **kw)
+        te = time.time()
+        t = time.strftime("%H:%M:%S", time.gmtime(te-ts))
+        print(f"func:{f.__name__} took: {t}")
+        return result
+    return wrap
+
+def hash_array(arr):
+    return hashlib.sha224(arr).hexdigest()
 
 def camb_clfile(fname, lmax=None):
     """CAMB spectra (lenspotentialCls, lensedCls, tensCls or ScalCls types) returned as a dict of numpy arrays.
