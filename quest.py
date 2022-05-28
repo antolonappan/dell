@@ -10,7 +10,9 @@ import pickle as pl
 from tqdm import tqdm
 import toml
 import matplotlib.pyplot as plt
-import pymaster as nmt
+import binning
+import analysis as ana
+#import pymaster as nmt
 
 
 class RecoBase:
@@ -20,7 +22,10 @@ class RecoBase:
                       cmb_sim_dir=None,cmb_sim_prefix=None,
                       exp_sim_dir=None,exp_sim_prefix=None,
                       phi_sim_dir=None,phi_sim_prefix=None,
-                      FG=False
+                      FG=False,
+                      Lmax=1024,
+                      nbin=100,
+                      ana_lmax = 1024
                 ):
 
         if FG:
@@ -42,7 +47,7 @@ class RecoBase:
         self.l = np.linspace(0,self.lmax,self.lmax+1)
         self.sigma = nlev_p      
         self.Nl = (self.sigma*(np.pi/10800.)/self.Tcmb)**2 * np.ones(self.lmax+1)
-        self.Lmax  = 1024     
+        self.Lmax  = Lmax
         self.rlmin, self.rlmax = 200, 1024 
         self.L = np.linspace(0,self.Lmax,self.Lmax+1)
         self.mask = hp.ud_grade(hp.read_map(maskpath),self.nside)
@@ -60,8 +65,51 @@ class RecoBase:
         self.phi_sim_dir = phi_sim_dir
         self.phi_sim_pre = phi_sim_prefix
         self.FG = FG
-        self.bin = nmt.bins.NmtBin.from_lmax_linear(self.Lmax,30)
-        self.B = self.bin.get_effective_ells()
+        self.nbin = nbin
+        self.mb = binning.multipole_binning(self.nbin,lmin=2,lmax=ana_lmax)
+        self.B = self.mb.bc
+
+    @classmethod
+    def from_ini(cls,ini):
+        config = toml.load(ini)
+        fc = config['Folder']
+        cc = config['CAMB']
+        mc = config['Map']
+        rc = config['Reconstruction']
+        ac = config['Analysis']
+
+        lib_dir = fc['lib_dir']
+        cmb_sim_dir = None if len(fc['cmb_dir']) == 0 else fc['cmb_dir']
+        cmb_sim_prefix = None if len(fc['cmb_prefix']) == 0 else fc['cmb_prefix']
+        exp_sim_dir = None if len(fc['exp_dir']) == 0 else fc['exp_dir']
+        exp_sim_prefix = None if len(fc['cmb_prefix']) == 0 else fc['exp_prefix']
+        phi_sim_dir = None if len(fc['phi_dir']) == 0 else fc['phi_dir']
+        phi_sim_prefix = None if len(fc['phi_prefix']) == 0 else fc['phi_prefix']
+
+        fwhm = float(mc['fwhm'])
+        nside = int(mc['nside'])
+        nlev_p = float(mc['nlev_p'])
+        maskpath = mc['maskpath']
+        len_cl_file = cc['cl_len']
+        unl_cl_file = cc['cl_unl']
+        FG = bool(mc['FG'])
+
+        Lmax = rc['Lmax']
+
+        ana_lmax = ac['lmax']
+        nbin = ac['nbin']
+
+        return cls(lib_dir,fwhm,nside,nlev_p,maskpath,
+                   len_cl_file,unl_cl_file,cmb_sim_dir,
+                   cmb_sim_prefix,exp_sim_dir,exp_sim_prefix,
+                   phi_sim_dir,phi_sim_prefix,
+                   FG,Lmax,nbin,ana_lmax)
+
+
+
+
+    def bin_cell(self,arr):
+        return binning.binning(arr,self.mb)
 
     @property
     def Lfac(self):
@@ -223,7 +271,7 @@ class RecoBase:
             arr = []
             for i in tqdm(range(n),desc='Calcualting fiducial stat',unit='realisation'):
                 cl = hp.alm2cl(self.__get_input_phi_sim__(i),lmax_out=self.Lmax)
-                arr.append(self.bin.bin_cell(cl))
+                arr.append(self.bin_cell(cl))
             arr = np.array(arr)
 
             stat = {}
@@ -236,7 +284,7 @@ class RecoBase:
     def plot_qcl_stat(self,n=100):
         cl = []
         for idx in tqdm(range(100),desc='Calculating reconstruction stat',unit='realisation'):
-            cl.append(self.bin.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm)))
+            cl.append(self.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm)))
 
         cl = np.array(cl)
         theory = self.cl_unl['pp'][:self.Lmax+1]
@@ -244,7 +292,7 @@ class RecoBase:
         plt.loglog(self.L,self.Lfac*theory)
         plt.errorbar(self.B,cl.mean(axis=0),yerr=cl.std(axis=0),fmt='o')
 
-    def SNR(self,n=100,use_offdiag=True):
+    def __SNR__(self,n=100,use_offdiag=True):
         stat = self.input_stat(n)
         input_mean = stat['mean']
         input_cov = stat['cov']
@@ -262,11 +310,20 @@ class RecoBase:
         select = np.where((self.B > 20) & (self.B < 200))[0]
         al_phi = []
         for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
-            output_cl = self.bin.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm)
+            output_cl = self.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm)
             A_b = output_cl/input_mean
             al_phi.append(np.sum(a_b[select]*A_b[select])/a_b[select].sum())
         al_phi = np.array(al_phi)
         return 1/np.std(al_phi)
+    
+    def SNR_phi(self,n):
+        cl_pp = []
+        for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
+            cl_pp.append(self.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm))
+        cl_pp = np.array(cl_pp)
+        stat = ana.statistics(ocl=1.,scl=cl_pp)
+        stat.get_amp(fcl=cl_pp.mean(axis=0))
+        return 1/stat.sA
 
     def response(self,idx):
         return self.get_cl_phi_inXout(idx)/self.cl_unl['pp'][:self.Lmax+1]
@@ -274,10 +331,10 @@ class RecoBase:
     def plot_var(self,n=100):
         output_cl = []
         for idx in tqdm(range(n),desc='Calculating var',unit='realisation'):
-            output_cl.append(self.bin.bin_cell((self.get_qcl_sim(idx)/self.fsky)))
+            output_cl.append(self.bin_cell((self.get_qcl_sim(idx)/self.fsky)))
         sim_var = np.var(np.array(output_cl),axis=0)
 
-        cl_pp = self.bin.bin_cell((self.cl_unl['pp'][:self.Lmax+1] + self.norm))
+        cl_pp = self.bin_cell((self.cl_unl['pp'][:self.Lmax+1] + self.norm))
         f = (2*self.fsky)/(((2*self.B) + 1)*10)
         tru_var = f * cl_pp**2
         plt.plot(self.B,sim_var/tru_var,label='sim/anal')
@@ -288,54 +345,45 @@ class RecoBase:
         #plt.loglog(self.B,sim_var,label='sim')
         plt.legend()
 
-    def get_temp_corr(self,idx):
+    def get_tXphi(self,idx):
+        clpp = self.cl_unl['pp'][:self.Lmax+1]/self.Tcmb**2
+        cltt = self.cl_unl['tt'][:self.Lmax+1]/self.Tcmb**2
+        cltp = self.cl_unl['tp'][:self.Lmax+1]/self.Tcmb**2
         Plm = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,
                             hp.alm2map(self.__get_input_phi_sim__(idx),
-                                       self.nside))
-        Tlm = cs.utils.gauss2alm_const(self.lmax,self.cl_unl['pp'],
-                                       self.cl_unl_ar[2,:],self.cl_unl_ar[3,:],Plm)
+                                       self.nside)/self.Tcmb)
+        Tlm = cs.utils.gauss2alm_const(self.Lmax,clpp,cltt,cltp,Plm)
         del Plm
-        tmap = cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,Tlm)*self.mask
+        tmap = cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,Tlm[1])*self.mask
         del Tlm
-        Tlm = cs.utils.hp_map2alm(self.Lmax,self.Lmax,tmap)
-        Plm = self.get_qlm_sim(idx)
-        return cs.utils.alm2cl(self.Lmax,Tlm,Plm)
+        Tlm = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,tmap)
+        Plm = self.get_qlm_sim(idx)/self.Tcmb
+        return cs.utils.alm2cl(self.Lmax,Tlm,Plm)/self.fsky
+
+    def tXphi_stat(self,n):
+        fname = os.path.join(self.lib_dir,f"tXphi_{n}_{hash_array(self.B)}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            cl = []
+            for i in tqdm(range(n), desc='Calculating TempXphi',unit='simulation'):
+                cl.append(self.bin_cell(self.get_tXphi(i)))
+            cl = np.array(cl)
+            pl.dump(cl,open(fname,'wb'))
+            return cl
+
+    def plot_tXphi_stat(self,n):
+        cl = self.tXphi_stat(n)
+        plt.errorbar(self.B,cl.mean(axis=0),yerr=cl.std(axis=0))
+        plt.loglog(self.L,self.cl_unl['tp'][:self.Lmax+1]/self.Tcmb**2)
+
+    def SNR_tp(self,n):
+        cltp = self.tXphi_stat(n)[:,:]
+        stat = ana.statistics(ocl=1.,scl=cltp)
+        stat.get_amp(fcl=cltp.mean(axis=0))
+        return 1/stat.sA
 
 
-
-
-
-
-class RecoIni(RecoBase):
-
-    def __init__(self,ini):
-        config = toml.load(ini)
-        fc = config['Folder']
-        cc = config['CAMB']
-        mc = config['Map']
-        
-        lib_dir = fc['lib_dir']
-        cmb_sim_dir = None if len(fc['cmb_dir']) == 0 else fc['cmb_dir']
-        cmb_sim_prefix = None if len(fc['cmb_prefix']) == 0 else fc['cmb_prefix']
-        exp_sim_dir = None if len(fc['exp_dir']) == 0 else fc['exp_dir']
-        exp_sim_prefix = None if len(fc['cmb_prefix']) == 0 else fc['exp_prefix']
-        phi_sim_dir = None if len(fc['phi_dir']) == 0 else fc['phi_dir']
-        phi_sim_prefix = None if len(fc['phi_prefix']) == 0 else fc['phi_prefix']        
-        
-        fwhm = float(mc['fwhm'])
-        nside = int(mc['nside'])
-        nlev_p = float(mc['nlev_p'])
-        maskpath = mc['maskpath']
-        len_cl_file = cc['cl_len']
-        unl_cl_file = cc['cl_unl']
-        FG = bool(mc['FG'])
-        
-        super().__init__(lib_dir,fwhm,nside,nlev_p,maskpath,
-                      len_cl_file,unl_cl_file,
-                      cmb_sim_dir,cmb_sim_prefix,
-                      exp_sim_dir,exp_sim_prefix,
-                      phi_sim_dir,phi_sim_prefix,
-                      FG)
 
 
 
@@ -349,5 +397,5 @@ if __name__ == "__main__":
     ini = args.inifile[0]
 
     if args.qlms:
-        r = RecoIni(ini)
+        r = RecoBase.from_ini(ini)
         r.run_job(500)

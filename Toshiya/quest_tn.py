@@ -294,7 +294,7 @@ class RecoBase:
 
 class RecoIni(RecoBase):
 
-    def __init__(self,ini,nbin=100,Lmax=1024):
+    def __init__(self,ini):
         config = toml.load(ini)
         fc = config['Folder']
         cc = config['CAMB']
@@ -315,6 +315,7 @@ class RecoIni(RecoBase):
         len_cl_file = cc['cl_len']
         unl_cl_file = cc['cl_unl']
         FG = bool(mc['FG'])
+    
         
         super().__init__(lib_dir,fwhm,nside,nlev_p,maskpath,
                       len_cl_file,unl_cl_file,
