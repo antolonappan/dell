@@ -16,7 +16,7 @@ source /global/homes/l/lonappan/.bashrc
 conda activate cmblens
 cd /global/u2/l/lonappan/workspace/LBlens
 
-export ini=litebird.ini
+export ini=litebirdFG1.ini
 
 
 mpirun -np $SLURM_NTASKS python quest.py $ini -qlms

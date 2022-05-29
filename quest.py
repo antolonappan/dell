@@ -12,20 +12,17 @@ import toml
 import matplotlib.pyplot as plt
 import binning
 import analysis as ana
-#import pymaster as nmt
 
 
 class RecoBase:
 
-    def __init__(self,lib_dir,fwhm,nside,nlev_p,maskpath,
-                      len_cl_file,unl_cl_file,
+    def __init__(self,lib_dir,lib_dir_ap,fwhm,nside,nlev_p,
+                      maskpath,len_cl_file,unl_cl_file,
                       cmb_sim_dir=None,cmb_sim_prefix=None,
                       exp_sim_dir=None,exp_sim_prefix=None,
                       phi_sim_dir=None,phi_sim_prefix=None,
-                      FG=False,
-                      Lmax=1024,
-                      nbin=100,
-                      ana_lmax = 1024
+                      FG=False,Lmax=1024,nbin=100,ana_lmax=1024,
+                      MF_imin=400,MF_imax=500
                 ):
 
         if FG:
@@ -34,18 +31,22 @@ class RecoBase:
             assert (cmb_sim_prefix != None) & (cmb_sim_dir != None)
 
         self.lib_dir = lib_dir
-        self.mass_dir = os.path.join(lib_dir,'MASS')
+        self.mass_dir = os.path.join(lib_dir,f'MASS_{lib_dir_ap}')
+        self.filt_dir = os.path.join(lib_dir,f'CINV_{lib_dir_ap}')
+        self.map_dir = os.path.join(lib_dir,f'MAP_{lib_dir_ap}')
         if mpi.rank == 0:
             os.makedirs(self.mass_dir, exist_ok=True)
+            os.makedirs(self.filt_dir, exist_ok=True)
+            os.makedirs(self.map_dir, exist_ok=True)
         mpi.barrier()
 
         self.fwhm = fwhm
-        self.nside = nside         
+        self.nside = nside
         self.Tcmb  = 2.726e6
-        self.lmax  = 2*nside     
+        self.lmax  = 2*nside
         self.npix  = 12*nside**2
         self.l = np.linspace(0,self.lmax,self.lmax+1)
-        self.sigma = nlev_p      
+        self.sigma = nlev_p
         self.Nl = (self.sigma*(np.pi/10800.)/self.Tcmb)**2 * np.ones(self.lmax+1)
         self.Lmax  = Lmax
         self.rlmin, self.rlmax = 200, 1024 
@@ -68,6 +69,7 @@ class RecoBase:
         self.nbin = nbin
         self.mb = binning.multipole_binning(self.nbin,lmin=2,lmax=ana_lmax)
         self.B = self.mb.bc
+        self.mf_array = np.arange(MF_imin,MF_imax)
 
     @classmethod
     def from_ini(cls,ini):
@@ -79,10 +81,11 @@ class RecoBase:
         ac = config['Analysis']
 
         lib_dir = fc['lib_dir']
+        lib_dir_a = fc['lib_dir_append']
         cmb_sim_dir = None if len(fc['cmb_dir']) == 0 else fc['cmb_dir']
         cmb_sim_prefix = None if len(fc['cmb_prefix']) == 0 else fc['cmb_prefix']
         exp_sim_dir = None if len(fc['exp_dir']) == 0 else fc['exp_dir']
-        exp_sim_prefix = None if len(fc['cmb_prefix']) == 0 else fc['exp_prefix']
+        exp_sim_prefix = None if len(fc['exp_prefix']) == 0 else fc['exp_prefix']
         phi_sim_dir = None if len(fc['phi_dir']) == 0 else fc['phi_dir']
         phi_sim_prefix = None if len(fc['phi_prefix']) == 0 else fc['phi_prefix']
 
@@ -99,14 +102,20 @@ class RecoBase:
         ana_lmax = ac['lmax']
         nbin = ac['nbin']
 
-        return cls(lib_dir,fwhm,nside,nlev_p,maskpath,
+        return cls(lib_dir,lib_dir_a,fwhm,nside,nlev_p,maskpath,
                    len_cl_file,unl_cl_file,cmb_sim_dir,
                    cmb_sim_prefix,exp_sim_dir,exp_sim_prefix,
                    phi_sim_dir,phi_sim_prefix,
                    FG,Lmax,nbin,ana_lmax)
 
 
-
+    def plot_norm(self):
+        plt.loglog(self.L,self.Lfac*self.norm)
+        plt.loglog(self.L,self.Lfac*self.cl_unl['pp'][:self.Lmax+1])
+    def plot_qcl_sim(self,idx):
+        plt.loglog(self.L,self.Lfac*(self.cl_unl['pp'][:self.Lmax+1]+self.norm))
+        plt.loglog(self.L,self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.mean_field_cl()-self.norm))
+        plt.loglog(self.L,self.Lfac*(self.cl_unl['pp'][:self.Lmax+1]))
 
     def bin_cell(self,arr):
         return binning.binning(arr,self.mb)
@@ -137,33 +146,45 @@ class RecoBase:
         return hp.map2alm(hp.read_map(fname,(0,1,2)),lmax=self.lmax)
 
     def make_exp_sim(self,idx):
-        Tlm, Elm, Blm = self.get_cmb_sim(idx)
-        Tlm_f = hp.almxfl(Tlm/self.Tcmb,self.beam) + hp.synalm(self.Nl,lmax=self.lmax)
-        Elm_f = hp.almxfl(Elm/self.Tcmb,self.beam)+ hp.synalm(self.Nl,lmax=self.lmax)
-        Blm_f = hp.almxfl(Blm/self.Tcmb,self.beam) + hp.synalm(self.Nl,lmax=self.lmax)
-        del (Tlm, Elm, Blm)
-        T,Q,U = hp.alm2map([Tlm_f,Elm_f,Blm_f],self.nside)
-        del T
-        return np.reshape(np.array((Q*self.mask,U*self.mask)),(2,1,self.npix))
+        fname = os.path.join(self.map_dir,f"exp_sim_{idx:04d}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            Tlm, Elm, Blm = self.get_cmb_sim(idx)
+            Tlm_f = hp.almxfl(Tlm/self.Tcmb,self.beam) + hp.synalm(self.Nl,lmax=self.lmax)
+            Elm_f = hp.almxfl(Elm/self.Tcmb,self.beam)+ hp.synalm(self.Nl,lmax=self.lmax)
+            Blm_f = hp.almxfl(Blm/self.Tcmb,self.beam) + hp.synalm(self.Nl,lmax=self.lmax)
+            del (Tlm, Elm, Blm)
+            T,Q,U = hp.alm2map([Tlm_f,Elm_f,Blm_f],self.nside)
+            del T
+            QU = np.reshape(np.array((Q*self.mask,U*self.mask)),(2,1,self.npix))
+            pl.dump(QU, open(fname,'wb'))
+            return QU
 
     def get_exp_sim(self,idx):
         fname = os.path.join(self.exp_sim_dir,f"{self.exp_sim_pre}{idx:04d}.fits")
-        Tlm,Elm,Blm = hp.map2alm(hp.read_map(fname,(0,1,2)),lmax=self.lmax)
-        T,Q,U = hp.alm2map([Tlm_f,Elm_f,Blm_f],self.nside)
-        del (Tlm,Elm,Blm,T)
+        #Tlm,Elm,Blm = hp.map2alm(hp.read_map(fname,(0,1,2)),lmax=self.lmax)
+        T,Q,U = hp.alm2map(hp.read_alm(fname,(1,2,3))/self.Tcmb,self.nside)
+        del T
         return np.reshape(np.array((Q,U)),(2,1,self.npix))
 
     def get_sim(self,idx):
         return self.get_exp_sim(idx) if self.FG else self.make_exp_sim(idx)
 
-    def get_falm_sim(self,idx):
-        Bl = np.reshape(self.beam,(1,self.lmax+1))
-        QU = self.get_sim(idx)
-        E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
-                                     Bl,self.invN,QU,chn=1,itns=[1000],eps=[1e-5],
-                                     filter='',ro=10)
-        return E, B
+    def get_falm_sim(self,idx,filt=''):
+        fname = os.path.join(self.filt_dir,f"cinv_sim_{idx:04d}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            Bl = np.reshape(self.beam,(1,self.lmax+1))
+            QU = self.get_sim(idx)
+            E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
+                                         Bl,self.invN,QU,chn=1,itns=[1000],eps=[1e-5],
+                                         filter=filt,ro=10)
+            pl.dump((E,B),open(fname,'wb'))
+            return E, B
 
+#    @timing
     def get_qlm_sim(self,idx):
         fname = os.path.join(self.mass_dir,f"phi_sim_{idx:04d}.pkl")
         if os.path.isfile(fname):
@@ -177,6 +198,8 @@ class RecoBase:
             return glm
 
     def get_qcl_sim(self,idx):
+        if idx in self.mf_array:
+            raise ValueError
         return cs.utils.alm2cl(self.Lmax,self.get_qlm_sim(idx))
 
     def get_cross_qcl_sim(self,idx1,idx2):
@@ -195,22 +218,22 @@ class RecoBase:
     def run_job(self,nsim):
         jobs = np.arange(nsim)
         for i in jobs[mpi.rank::mpi.size]:
-            Null = self.get_qcl_sim(i)
+            Null = self.get_qlm_sim(i)
 
-    def mean_field(self,idx_array):
-        fname = os.path.join(self.lib_dir,f"MF_{hash_array(idx_array)}.pkl")
+    def mean_field(self):
+        fname = os.path.join(self.mass_dir,f"MF_{hash_array(self.mf_array)}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
             arr = np.zeros((self.Lmax+1,self.Lmax+1),dtype=complex)
-            for i in tqdm(idx_array,desc="Calculating Mean Field",unit='Simulation'):
+            for i in tqdm(self.mf_array,desc="Calculating Mean Field",unit='Simulation'):
                 arr += self.get_qlm_sim(i)
-            arr /= len(idx_array)
+            arr /= len(self.mf_array)
             pl.dump(arr,open(fname,'wb'))
             return arr
 
-    def mean_field_cl(self,idx_array):
-        return cs.utils.alm2cl(self.Lmax,self.mean_field(idx_array))
+    def mean_field_cl(self):
+        return cs.utils.alm2cl(self.Lmax,self.mean_field())
 
     def plot_recon_sim(self,idx):
         theory = self.cl_unl['pp'][:self.Lmax+1]
@@ -218,13 +241,11 @@ class RecoBase:
         plt.loglog(self.L,self.Lfac*self.get_qcl_sim(idx)/self.fsky)
         plt.loglog(self.L,self.Lfac*(theory+self.norm))
 
-    def plot_mf(self,idx,idxe=None):
+    def plot_mf(self):
         theory = self.cl_unl['pp'][:self.Lmax+1]
         plt.figure(figsize=(8,8))
         plt.loglog(self.L,self.Lfac*theory)
-        plt.loglog(self.L,self.Lfac*self.mean_field_cl(idx))
-        if idxe is not None:
-            plt.loglog(self.L,self.Lfac*self.mean_field_cl(idxe))
+        plt.loglog(self.L,self.Lfac*self.mean_field_cl())
 
     def __get_input_phi_sim__(self,idx):
         fname = os.path.join(self.phi_sim_dir,f"{self.phi_sim_pre}{idx:04d}.fits")
@@ -283,8 +304,8 @@ class RecoBase:
 
     def plot_qcl_stat(self,n=100):
         cl = []
-        for idx in tqdm(range(100),desc='Calculating reconstruction stat',unit='realisation'):
-            cl.append(self.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm)))
+        for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
+            cl.append(self.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm-self.mean_field_cl())))
 
         cl = np.array(cl)
         theory = self.cl_unl['pp'][:self.Lmax+1]
@@ -315,7 +336,7 @@ class RecoBase:
             al_phi.append(np.sum(a_b[select]*A_b[select])/a_b[select].sum())
         al_phi = np.array(al_phi)
         return 1/np.std(al_phi)
-    
+
     def SNR_phi(self,n):
         cl_pp = []
         for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
@@ -361,7 +382,7 @@ class RecoBase:
         return cs.utils.alm2cl(self.Lmax,Tlm,Plm)/self.fsky
 
     def tXphi_stat(self,n):
-        fname = os.path.join(self.lib_dir,f"tXphi_{n}_{hash_array(self.B)}.pkl")
+        fname = os.path.join(self.mass_dir,f"tXphi_{n}_{hash_array(self.B)}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
