@@ -17,12 +17,12 @@ import analysis as ana
 class RecoBase:
 
     def __init__(self,lib_dir,lib_dir_ap,fwhm,nside,nlev_p,
-                      maskpath,len_cl_file,unl_cl_file,
+                      maskpath,nsim,len_cl_file,unl_cl_file,
                       cmb_sim_dir=None,cmb_sim_prefix=None,
                       exp_sim_dir=None,exp_sim_prefix=None,
                       phi_sim_dir=None,phi_sim_prefix=None,
                       FG=False,Lmax=1024,nbin=100,ana_lmax=1024,
-                      MF_imin=400,MF_imax=500
+                      MF_imin=400,MF_imax=500,extra_mask=None
                 ):
 
         if FG:
@@ -52,6 +52,7 @@ class RecoBase:
         self.rlmin, self.rlmax = 200, 1024 
         self.L = np.linspace(0,self.Lmax,self.Lmax+1)
         self.mask = hp.ud_grade(hp.read_map(maskpath),self.nside)
+        self.nsim = nsim
         self.fsky = np.mean(self.mask)
         self.beam = 1./cmb.beam(self.fwhm,self.lmax)
         invn = self.mask * (np.radians(self.sigma/60)/self.Tcmb)**-2
@@ -70,6 +71,13 @@ class RecoBase:
         self.mb = binning.multipole_binning(self.nbin,lmin=2,lmax=ana_lmax)
         self.B = self.mb.bc
         self.mf_array = np.arange(MF_imin,MF_imax)
+        if extra_mask is not None:
+            self.extra_mask = hp.ud_grade(hp.read_map(extra_mask),self.nside)
+            print(f"An extra Mask is applied to data. Previous fsky is {self.fsky:.2f} and new fsky = {np.mean(self.extra_mask):.2f}")
+            self.fsky = np.mean(self.extra_mask)
+        else:
+            self.extra_mask = np.ones_like(self.mask)
+
 
     @classmethod
     def from_ini(cls,ini):
@@ -93,6 +101,7 @@ class RecoBase:
         nside = int(mc['nside'])
         nlev_p = float(mc['nlev_p'])
         maskpath = mc['maskpath']
+        nsim = mc['nsim']
         len_cl_file = cc['cl_len']
         unl_cl_file = cc['cl_unl']
         FG = bool(mc['FG'])
@@ -101,12 +110,15 @@ class RecoBase:
 
         ana_lmax = ac['lmax']
         nbin = ac['nbin']
+        MF_imin = int(rc['MF_imin'])
+        MF_imax = int(rc['MF_imax'])
+        extra_mask = None if len(rc['mask'])==0 else rc['mask']
 
         return cls(lib_dir,lib_dir_a,fwhm,nside,nlev_p,maskpath,
-                   len_cl_file,unl_cl_file,cmb_sim_dir,
+                   nsim,len_cl_file,unl_cl_file,cmb_sim_dir,
                    cmb_sim_prefix,exp_sim_dir,exp_sim_prefix,
                    phi_sim_dir,phi_sim_prefix,
-                   FG,Lmax,nbin,ana_lmax)
+                   FG,Lmax,nbin,ana_lmax,MF_imin,MF_imax,extra_mask)
 
 
     def plot_norm(self):
@@ -114,7 +126,7 @@ class RecoBase:
         plt.loglog(self.L,self.Lfac*self.cl_unl['pp'][:self.Lmax+1])
     def plot_qcl_sim(self,idx):
         plt.loglog(self.L,self.Lfac*(self.cl_unl['pp'][:self.Lmax+1]+self.norm))
-        plt.loglog(self.L,self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.mean_field_cl()-self.norm))
+        plt.loglog(self.L,self.Lfac*(((self.get_qcl_sim(idx)-self.mean_field_cl())/self.fsky)-self.norm))
         plt.loglog(self.L,self.Lfac*(self.cl_unl['pp'][:self.Lmax+1]))
 
     def bin_cell(self,arr):
@@ -146,6 +158,7 @@ class RecoBase:
         return hp.map2alm(hp.read_map(fname,(0,1,2)),lmax=self.lmax)
 
     def make_exp_sim(self,idx):
+        print(f"Maps without FG")
         fname = os.path.join(self.map_dir,f"exp_sim_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
@@ -162,31 +175,54 @@ class RecoBase:
             return QU
 
     def get_exp_sim(self,idx):
-        fname = os.path.join(self.exp_sim_dir,f"{self.exp_sim_pre}{idx:04d}.fits")
-        #Tlm,Elm,Blm = hp.map2alm(hp.read_map(fname,(0,1,2)),lmax=self.lmax)
-        T,Q,U = hp.alm2map(hp.read_alm(fname,(1,2,3))/self.Tcmb,self.nside)
-        del T
-        return np.reshape(np.array((Q,U)),(2,1,self.npix))
+        print(f"Maps with FG")
+        fname_main = os.path.join(self.map_dir,f"exp_sim_{idx:04d}.pkl")
+        if os.path.isfile(fname_main):
+            return pl.load(open(fname_main,'rb'))
+        else:
+            fname = os.path.join(self.exp_sim_dir,f"{self.exp_sim_pre}{idx:04d}.fits")
+            #Tlm,Elm,Blm = hp.map2alm(hp.read_map(fname,(0,1,2)),lmax=self.lmax)
+            T,Q,U = hp.alm2map(hp.read_alm(fname,(1,2,3))/self.Tcmb,self.nside)
+            del T
+            QU = np.reshape(np.array((Q,U)),(2,1,self.npix))
+            pl.dump(QU, open(fname_main,'wb'))
+            return QU
 
     def get_sim(self,idx):
         return self.get_exp_sim(idx) if self.FG else self.make_exp_sim(idx)
 
-    def get_falm_sim(self,idx,filt=''):
-        fname = os.path.join(self.filt_dir,f"cinv_sim_{idx:04d}.pkl")
+    def get_falm_sim(self,idx,filt='',ret=None):
+        if np.all(self.extra_mask == 1):
+            fname = os.path.join(self.filt_dir,f"cinv_sim_{idx:04d}.pkl")
+        else:
+            fname = os.path.join(self.filt_dir,f"cinv_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
-            return pl.load(open(fname,'rb'))
+            E,B = pl.load(open(fname,'rb'))
         else:
             Bl = np.reshape(self.beam,(1,self.lmax+1))
-            QU = self.get_sim(idx)
+            QU = self.get_sim(idx)*self.extra_mask
             E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
                                          Bl,self.invN,QU,chn=1,itns=[1000],eps=[1e-5],
                                          filter=filt,ro=10)
             pl.dump((E,B),open(fname,'wb'))
+
+        if ret is None:
             return E, B
+        elif ret == 'E':
+            del B
+            return E
+        elif ret == 'B':
+            del E
+            return B
+        else:
+            raise ValueError
 
 #    @timing
     def get_qlm_sim(self,idx):
-        fname = os.path.join(self.mass_dir,f"phi_sim_{idx:04d}.pkl")
+        if np.all(self.extra_mask == 1):
+            fname = os.path.join(self.mass_dir,f"phi_sim_{idx:04d}.pkl")
+        else:
+            fname = os.path.join(self.mass_dir,f"phi_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -197,10 +233,33 @@ class RecoBase:
             pl.dump(glm,open(fname,'wb'))
             return glm
 
+    def get_qlm_cross_sim(self,idx):
+        assert idx < self.nsim - 1
+        if np.all(self.extra_mask == 1):
+            fname = os.path.join(self.mass_dir,f"phi_cross_sim_{idx:04d}.pkl")
+        else:
+            fname = os.path.join(self.mass_dir,f"phi_cross_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            E = self.get_falm_sim(idx,ret="E")
+            B = self.get_falm_sim(idx+1,ret="B")
+            glm, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,self.cl_len[1,:],E,B)
+            del clm
+            glm *= self.norm[:,None]
+            pl.dump(glm,open(fname,'wb'))
+            return glm
+    def get_qcl_cross_sim(self,idx):
+        return cs.utils.alm2cl(self.Lmax,self.get_qlm_cross_sim(idx))
+    def get_qcl_cross_mean(self,n):
+        m = np.zeros_like(self.L)
+        for i in tqdm(range(n), desc='corss spectra stat',unit='simulation'):
+            m += self.get_qcl_cross_sim(i)
+        return m/n
     def get_qcl_sim(self,idx):
         if idx in self.mf_array:
             raise ValueError
-        return cs.utils.alm2cl(self.Lmax,self.get_qlm_sim(idx))
+        return cs.utils.alm2cl(self.Lmax,self.get_qlm_sim(idx)-self.mean_field())
 
     def get_cross_qcl_sim(self,idx1,idx2):
         return cs.utils.alms2cl(self.Lmax,
@@ -221,7 +280,10 @@ class RecoBase:
             Null = self.get_qlm_sim(i)
 
     def mean_field(self):
-        fname = os.path.join(self.mass_dir,f"MF_{hash_array(self.mf_array)}.pkl")
+        if np.all(self.extra_mask == 1):
+            fname = os.path.join(self.mass_dir,f"MF_{hash_array(self.mf_array)}.pkl")
+        else:
+            fname = os.path.join(self.mass_dir,f"MF_fsky_{self.fsky:.2f}_{hash_array(self.mf_array)}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -305,7 +367,7 @@ class RecoBase:
     def plot_qcl_stat(self,n=100):
         cl = []
         for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
-            cl.append(self.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm-self.mean_field_cl())))
+            cl.append(self.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm)))
 
         cl = np.array(cl)
         theory = self.cl_unl['pp'][:self.Lmax+1]
@@ -313,29 +375,29 @@ class RecoBase:
         plt.loglog(self.L,self.Lfac*theory)
         plt.errorbar(self.B,cl.mean(axis=0),yerr=cl.std(axis=0),fmt='o')
 
-    def __SNR__(self,n=100,use_offdiag=True):
-        stat = self.input_stat(n)
-        input_mean = stat['mean']
-        input_cov = stat['cov']
-        e = np.linalg.eigvals(input_cov)
-        if not np.all(e > 0):
-            print('covariance is not positive-definite')
-        if not use_offdiag:
-            cov = np.zeros(input_cov.shape)
-            np.fill_diagonal(cov, np.diag(input_cov))
-            input_cov = cov
-        inv_cov = np.linalg.inv(input_cov)
+#     def __SNR__(self,n=100,use_offdiag=True):
+#         stat = self.input_stat(n)
+#         input_mean = stat['mean']
+#         input_cov = stat['cov']
+#         e = np.linalg.eigvals(input_cov)
+#         if not np.all(e > 0):
+#             print('covariance is not positive-definite')
+#         if not use_offdiag:
+#             cov = np.zeros(input_cov.shape)
+#             np.fill_diagonal(cov, np.diag(input_cov))
+#             input_cov = cov
+#         inv_cov = np.linalg.inv(input_cov)
 
-        a_b = input_mean * np.dot(inv_cov,input_mean)
+#         a_b = input_mean * np.dot(inv_cov,input_mean)
 
-        select = np.where((self.B > 20) & (self.B < 200))[0]
-        al_phi = []
-        for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
-            output_cl = self.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm)
-            A_b = output_cl/input_mean
-            al_phi.append(np.sum(a_b[select]*A_b[select])/a_b[select].sum())
-        al_phi = np.array(al_phi)
-        return 1/np.std(al_phi)
+#         select = np.where((self.B > 20) & (self.B < 200))[0]
+#         al_phi = []
+#         for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
+#             output_cl = self.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm)
+#             A_b = output_cl/input_mean
+#             al_phi.append(np.sum(a_b[select]*A_b[select])/a_b[select].sum())
+#         al_phi = np.array(al_phi)
+#         return 1/np.std(al_phi)
 
     def SNR_phi(self,n):
         cl_pp = []
@@ -414,9 +476,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='ini')
     parser.add_argument('inifile', type=str, nargs=1)
     parser.add_argument('-qlms', dest='qlms', action='store_true', help='reconstruct')
+    parser.add_argument('-map', dest='map', action='store_true', help='map')
     args = parser.parse_args()
     ini = args.inifile[0]
 
     if args.qlms:
         r = RecoBase.from_ini(ini)
         r.run_job(500)
+
+    if args.map:
+        r = RecoBase.from_ini(ini)
+        jobs = np.arange(500)
+        for i in jobs[mpi.rank::mpi.size]:
+            Null = r.get_sim(i)

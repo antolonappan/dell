@@ -19,4 +19,4 @@ cd /global/u2/l/lonappan/workspace/LBlens
 export ini=litebirdFG1.ini
 
 
-mpirun -np $SLURM_NTASKS python quest.py $ini -qlms
+mpirun -np $SLURM_NTASKS python quest.py $ini -map
