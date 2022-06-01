@@ -192,10 +192,7 @@ class RecoBase:
         return self.get_exp_sim(idx) if self.FG else self.make_exp_sim(idx)
 
     def get_falm_sim(self,idx,filt='',ret=None):
-        if np.all(self.extra_mask == 1):
-            fname = os.path.join(self.filt_dir,f"cinv_sim_{idx:04d}.pkl")
-        else:
-            fname = os.path.join(self.filt_dir,f"cinv_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
+        fname = os.path.join(self.filt_dir,f"cinv_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             E,B = pl.load(open(fname,'rb'))
         else:
@@ -219,10 +216,7 @@ class RecoBase:
 
 #    @timing
     def get_qlm_sim(self,idx):
-        if np.all(self.extra_mask == 1):
-            fname = os.path.join(self.mass_dir,f"phi_sim_{idx:04d}.pkl")
-        else:
-            fname = os.path.join(self.mass_dir,f"phi_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
+        fname = os.path.join(self.mass_dir,f"phi_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -235,10 +229,7 @@ class RecoBase:
 
     def get_qlm_cross_sim(self,idx):
         assert idx < self.nsim - 1
-        if np.all(self.extra_mask == 1):
-            fname = os.path.join(self.mass_dir,f"phi_cross_sim_{idx:04d}.pkl")
-        else:
-            fname = os.path.join(self.mass_dir,f"phi_cross_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
+        fname = os.path.join(self.mass_dir,f"phi_cross_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -280,10 +271,7 @@ class RecoBase:
             Null = self.get_qlm_sim(i)
 
     def mean_field(self):
-        if np.all(self.extra_mask == 1):
-            fname = os.path.join(self.mass_dir,f"MF_{hash_array(self.mf_array)}.pkl")
-        else:
-            fname = os.path.join(self.mass_dir,f"MF_fsky_{self.fsky:.2f}_{hash_array(self.mf_array)}.pkl")
+        fname = os.path.join(self.mass_dir,f"MF_fsky_{self.fsky:.2f}_{hash_array(self.mf_array)}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
