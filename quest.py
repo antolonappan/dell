@@ -12,6 +12,7 @@ import toml
 import matplotlib.pyplot as plt
 import binning
 import analysis as ana
+import pymaster as nmt
 
 
 class RecoBase:
@@ -22,7 +23,8 @@ class RecoBase:
                       exp_sim_dir=None,exp_sim_prefix=None,
                       phi_sim_dir=None,phi_sim_prefix=None,
                       FG=False,Lmax=1024,nbin=100,ana_lmax=1024,
-                      MF_imin=400,MF_imax=500,extra_mask=None
+                      MF_imin=400,MF_imax=500,extra_mask=None,
+                      which_bin='namaster'
                 ):
 
         if FG:
@@ -55,8 +57,6 @@ class RecoBase:
         self.nsim = nsim
         self.fsky = np.mean(self.mask)
         self.beam = 1./cmb.beam(self.fwhm,self.lmax)
-        invn = self.mask * (np.radians(self.sigma/60)/self.Tcmb)**-2
-        self.invN = np.reshape(np.array((invn,invn)),(2,1,self.npix))
         self.cl_len = cmb.read_camb_cls(len_cl_file,ftype='lens',output='array')[:,:self.lmax+1]
         self.cl_unl = camb_clfile(unl_cl_file)
         self.norm = self.get_norm
@@ -67,9 +67,6 @@ class RecoBase:
         self.phi_sim_dir = phi_sim_dir
         self.phi_sim_pre = phi_sim_prefix
         self.FG = FG
-        self.nbin = nbin
-        self.mb = binning.multipole_binning(self.nbin,lmin=2,lmax=ana_lmax)
-        self.B = self.mb.bc
         self.mf_array = np.arange(MF_imin,MF_imax)
         if extra_mask is not None:
             self.extra_mask = hp.ud_grade(hp.read_map(extra_mask),self.nside)
@@ -77,6 +74,22 @@ class RecoBase:
             self.fsky = np.mean(self.extra_mask)
         else:
             self.extra_mask = np.ones_like(self.mask)
+
+        invn = self.mask *self.extra_mask * (np.radians(self.sigma/60)/self.Tcmb)**-2
+        self.invN = np.reshape(np.array((invn,invn)),(2,1,self.npix))
+
+
+        self.nbin = nbin
+        self.which_bin = which_bin
+        if which_bin == 'cmblensplus':
+            self.mb = binning.multipole_binning(self.nbin,lmin=2,lmax=ana_lmax)
+            self.B = self.mb.bc
+        elif which_bin == 'namaster':
+            self.mb = nmt.bins.NmtBin.from_lmax_linear(self.Lmax,self.nbin)
+            self.B = self.mb.get_effective_ells()
+        else:
+            raise ValueError
+
 
 
     @classmethod
@@ -113,28 +126,28 @@ class RecoBase:
         MF_imin = int(rc['MF_imin'])
         MF_imax = int(rc['MF_imax'])
         extra_mask = None if len(rc['mask'])==0 else rc['mask']
+        which_bin = ac['which_bin']
 
         return cls(lib_dir,lib_dir_a,fwhm,nside,nlev_p,maskpath,
                    nsim,len_cl_file,unl_cl_file,cmb_sim_dir,
                    cmb_sim_prefix,exp_sim_dir,exp_sim_prefix,
                    phi_sim_dir,phi_sim_prefix,
-                   FG,Lmax,nbin,ana_lmax,MF_imin,MF_imax,extra_mask)
-
-
-    def plot_norm(self):
-        plt.loglog(self.L,self.Lfac*self.norm)
-        plt.loglog(self.L,self.Lfac*self.cl_unl['pp'][:self.Lmax+1])
-    def plot_qcl_sim(self,idx):
-        plt.loglog(self.L,self.Lfac*(self.cl_unl['pp'][:self.Lmax+1]+self.norm))
-        plt.loglog(self.L,self.Lfac*(((self.get_qcl_sim(idx)-self.mean_field_cl())/self.fsky)-self.norm))
-        plt.loglog(self.L,self.Lfac*(self.cl_unl['pp'][:self.Lmax+1]))
+                   FG,Lmax,nbin,ana_lmax,MF_imin,MF_imax,extra_mask,
+                   which_bin)
 
     def bin_cell(self,arr):
-        return binning.binning(arr,self.mb)
+        if self.which_bin == 'cmblensplus':
+            return binning.binning(arr,self.mb)
+        else:
+            return self.mb.bin_cell(arr)
 
     @property
     def Lfac(self):
         L = self.L
+        return (L*(L+1.))**2/(2*np.pi)
+    @property
+    def Bfac(self):
+        L = self.B
         return (L*(L+1.))**2/(2*np.pi)
 
     @property
@@ -240,22 +253,33 @@ class RecoBase:
             glm *= self.norm[:,None]
             pl.dump(glm,open(fname,'wb'))
             return glm
+
     def get_qcl_cross_sim(self,idx):
         return cs.utils.alm2cl(self.Lmax,self.get_qlm_cross_sim(idx))
+
     def get_qcl_cross_mean(self,n):
         m = np.zeros_like(self.L)
         for i in tqdm(range(n), desc='corss spectra stat',unit='simulation'):
             m += self.get_qcl_cross_sim(i)
         return m/n
+
     def get_qcl_sim(self,idx):
         if idx in self.mf_array:
             raise ValueError
-        return cs.utils.alm2cl(self.Lmax,self.get_qlm_sim(idx)-self.mean_field())
+        return cs.utils.alm2cl(self.Lmax,self.get_qlm_sim(idx)-self.mean_field())/self.fsky - self.MCN0()
+    
+    def get_qcl_stat(self,n,ret='dl'):
+        if ret == 'cl':
+            lfac = 1.0
+        elif ret == 'dl':
+            lfac = self.Lfac
+        else:
+            raise ValueError
+        cl = []
+        for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
+            cl.append(self.bin_cell(lfac*self.get_qcl_sim(i)))
+        return np.array(cl)
 
-    def get_cross_qcl_sim(self,idx1,idx2):
-        return cs.utils.alms2cl(self.Lmax,
-                                self.get_qlm_sim(idx1),
-                                self.get_qlm_sim(idx2))
 
     def get_kappa_alm_sim(self,idx):
         fl = self.L * (self.L + 1)/2
@@ -283,19 +307,16 @@ class RecoBase:
             return arr
 
     def mean_field_cl(self):
-        return cs.utils.alm2cl(self.Lmax,self.mean_field())
+        return cs.utils.alm2cl(self.Lmax,self.mean_field())/self.fsky
 
-    def plot_recon_sim(self,idx):
-        theory = self.cl_unl['pp'][:self.Lmax+1]
-        plt.figure(figsize=(8,8))
-        plt.loglog(self.L,self.Lfac*self.get_qcl_sim(idx)/self.fsky)
-        plt.loglog(self.L,self.Lfac*(theory+self.norm))
-
-    def plot_mf(self):
-        theory = self.cl_unl['pp'][:self.Lmax+1]
-        plt.figure(figsize=(8,8))
-        plt.loglog(self.L,self.Lfac*theory)
-        plt.loglog(self.L,self.Lfac*self.mean_field_cl())
+    def MCN0(self,n=300):
+        fname = os.path.join(self.mass_dir,f"MCN0_{n}_fsky_{self.fsky:.2f}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            arr = self.get_qcl_cross_mean(n)/self.fsky
+            pl.dump(arr,open(fname,'wb'))
+            return arr
 
     def __get_input_phi_sim__(self,idx):
         fname = os.path.join(self.phi_sim_dir,f"{self.phi_sim_pre}{idx:04d}.fits")
@@ -321,100 +342,13 @@ class RecoBase:
 
         return cs.utils.alm2cl(self.Lmax,almi,almo)/self.fsky
 
-    def plot_input_sim(self,idx):
-        theory = self.cl_unl['pp'][:self.Lmax+1]
-        plt.figure(figsize=(8,8))
-        plt.loglog(self.L,self.Lfac*theory)
-        almi = self.get_input_phi_sim(idx)
-        plt.loglog(self.L,self.Lfac*hp.alm2cl(almi,lmax_out=self.Lmax)/self.fsky)
-
-    def plot_inXout(self,idx):
-        theory = self.cl_unl['pp'][:self.Lmax+1]
-        plt.figure(figsize=(8,8))
-        plt.loglog(self.L,self.Lfac*theory)  
-        plt.loglog(self.L,self.Lfac*self.get_cl_phi_inXout(idx))
-
-    def input_stat(self,n=100):
-        fname = os.path.join(self.lib_dir,f"fid_stat_{n}_{hash_array(self.B)}.pkl")
-        if os.path.isfile(fname):
-            return pl.load(open(fname,'rb'))
-        else:
-            arr = []
-            for i in tqdm(range(n),desc='Calcualting fiducial stat',unit='realisation'):
-                cl = hp.alm2cl(self.__get_input_phi_sim__(i),lmax_out=self.Lmax)
-                arr.append(self.bin_cell(cl))
-            arr = np.array(arr)
-
-            stat = {}
-            stat['mean'] = arr.mean(axis=0)
-            stat['cov'] = np.cov(arr.T)
-            del arr
-            pl.dump(stat,open(fname,'wb'))
-            return stat
-
-    def plot_qcl_stat(self,n=100):
-        cl = []
-        for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
-            cl.append(self.bin_cell(self.Lfac*((self.get_qcl_sim(idx)/self.fsky)-self.norm)))
-
-        cl = np.array(cl)
-        theory = self.cl_unl['pp'][:self.Lmax+1]
-        plt.figure(figsize=(8,8))
-        plt.loglog(self.L,self.Lfac*theory)
-        plt.errorbar(self.B,cl.mean(axis=0),yerr=cl.std(axis=0),fmt='o')
-
-#     def __SNR__(self,n=100,use_offdiag=True):
-#         stat = self.input_stat(n)
-#         input_mean = stat['mean']
-#         input_cov = stat['cov']
-#         e = np.linalg.eigvals(input_cov)
-#         if not np.all(e > 0):
-#             print('covariance is not positive-definite')
-#         if not use_offdiag:
-#             cov = np.zeros(input_cov.shape)
-#             np.fill_diagonal(cov, np.diag(input_cov))
-#             input_cov = cov
-#         inv_cov = np.linalg.inv(input_cov)
-
-#         a_b = input_mean * np.dot(inv_cov,input_mean)
-
-#         select = np.where((self.B > 20) & (self.B < 200))[0]
-#         al_phi = []
-#         for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
-#             output_cl = self.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm)
-#             A_b = output_cl/input_mean
-#             al_phi.append(np.sum(a_b[select]*A_b[select])/a_b[select].sum())
-#         al_phi = np.array(al_phi)
-#         return 1/np.std(al_phi)
 
     def SNR_phi(self,n):
-        cl_pp = []
-        for idx in tqdm(range(n),desc='Calculating reconstruction stat',unit='realisation'):
-            cl_pp.append(self.bin_cell((self.get_qcl_sim(idx)/self.fsky)-self.norm))
-        cl_pp = np.array(cl_pp)
+        cl_pp = self.get_qcl_stat(n,ret='cl')
         stat = ana.statistics(ocl=1.,scl=cl_pp)
         stat.get_amp(fcl=cl_pp.mean(axis=0))
         return 1/stat.sA
 
-    def response(self,idx):
-        return self.get_cl_phi_inXout(idx)/self.cl_unl['pp'][:self.Lmax+1]
-
-    def plot_var(self,n=100):
-        output_cl = []
-        for idx in tqdm(range(n),desc='Calculating var',unit='realisation'):
-            output_cl.append(self.bin_cell((self.get_qcl_sim(idx)/self.fsky)))
-        sim_var = np.var(np.array(output_cl),axis=0)
-
-        cl_pp = self.bin_cell((self.cl_unl['pp'][:self.Lmax+1] + self.norm))
-        f = (2*self.fsky)/(((2*self.B) + 1)*10)
-        tru_var = f * cl_pp**2
-        plt.plot(self.B,sim_var/tru_var,label='sim/anal')
-        plt.ylim(0,3)
-        plt.xlim(0,250)
-
-        #plt.loglog(self.B,tru_var,label='anal')
-        #plt.loglog(self.B,sim_var,label='sim')
-        plt.legend()
 
     def get_tXphi(self,idx):
         clpp = self.cl_unl['pp'][:self.Lmax+1]/self.Tcmb**2
