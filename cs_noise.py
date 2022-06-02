@@ -3,6 +3,8 @@ import healpy as hp
 import os
 import mpi
 import pickle as pl
+from scipy.signal import savgol_filter
+
 
 beam = 1/hp.gauss_beam(np.radians(.5),lmax=1500)
 
@@ -45,10 +47,23 @@ def get_mean_nl_mpi():
 
     if mpi.rank == 0:
         ne_mean = total_ne/mpi.size
-        nb_mean = total_ne/mpi.size
+        nb_mean = total_nb/mpi.size
         fname = f'/project/projectdirs/litebird/simulations/maps/lensing_project_paper/DELL/LiteBIRD/ne_nb_{mpi.size}.pkl'
         pl.dump((ne_mean,nb_mean),open(fname,'wb'))
 
+def smooth(y,d,c):
+    yw = y.copy()*10**6
+    yw[10:] = savgol_filter(yw[10:],d,c)
+    return yw/10**6
+
+def get_smooth_nl():
+    fname = '/project/projectdirs/litebird/simulations/maps/lensing_project_paper/DELL/LiteBIRD/ne_nb_100.pkl'
+    fname_f = '/project/projectdirs/litebird/simulations/maps/lensing_project_paper/DELL/LiteBIRD/ne_nb_100_smooth.pkl'
+    ne,nb = pl.load(open(fname,'rb'))
+    neh = smooth(ne,51,3)
+    nbh = smooth(nb,51,3)
+    pl.dump((neh,nbh),open(fname_f,'wb'))
+    return neh,nbh
 
 if __name__ == '__main__':
-    get_mean_nl_mpi()
+    get_smooth_nl()
