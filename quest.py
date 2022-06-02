@@ -3,7 +3,7 @@ import basic
 import curvedsky as cs
 import cmb
 import numpy as np
-from utils import camb_clfile,timing,hash_array
+from utils import camb_clfile,timing,hash_array,cli
 import os
 import mpi
 import pickle as pl
@@ -24,7 +24,7 @@ class RecoBase:
                       phi_sim_dir=None,phi_sim_prefix=None,
                       FG=False,Lmax=1024,nbin=100,ana_lmax=1024,
                       MF_imin=400,MF_imax=500,extra_mask=None,
-                      which_bin='namaster'
+                      which_bin='namaster',noise_spectra=None
                 ):
 
         if FG:
@@ -75,9 +75,6 @@ class RecoBase:
         else:
             self.extra_mask = np.ones_like(self.mask)
 
-        invn = self.mask *self.extra_mask * (np.radians(self.sigma/60)/self.Tcmb)**-2
-        self.invN = np.reshape(np.array((invn,invn)),(2,1,self.npix))
-
 
         self.nbin = nbin
         self.which_bin = which_bin
@@ -89,6 +86,18 @@ class RecoBase:
             self.B = self.mb.get_effective_ells()
         else:
             raise ValueError
+        if noise_spectra is None:
+            self.NL = 0
+            invn = self.mask *self.extra_mask * (np.radians(self.sigma/60)/self.Tcmb)**-2
+            self.invN = np.reshape(np.array((invn,invn)),(2,1,self.npix))
+        else:
+            ne, nb = pl.load(open(os.path.join(self.lib_dir,noise_spectra),'rb'))
+            ne /= self.Tcmb**2
+            nb /= self.Tcmb**2
+
+            self.NL = np.reshape(np.array((cli(ne[:self.lmax+1]),cli(nb[:self.lmax+1]))),(2,1,self.lmax+1))
+            invn = self.mask*self.extra_mask
+            self.invN = np.reshape(np.array((invn,invn)),(2,1,self.npix))
 
 
 
@@ -127,13 +136,14 @@ class RecoBase:
         MF_imax = int(rc['MF_imax'])
         extra_mask = None if len(rc['mask'])==0 else rc['mask']
         which_bin = ac['which_bin']
+        noise_spectra = None if len(rc['noise_spectra']) == 0 else rc['noise_spectra']
 
         return cls(lib_dir,lib_dir_a,fwhm,nside,nlev_p,maskpath,
                    nsim,len_cl_file,unl_cl_file,cmb_sim_dir,
                    cmb_sim_prefix,exp_sim_dir,exp_sim_prefix,
                    phi_sim_dir,phi_sim_prefix,
                    FG,Lmax,nbin,ana_lmax,MF_imin,MF_imax,extra_mask,
-                   which_bin)
+                   which_bin,noise_spectra)
 
     def bin_cell(self,arr):
         if self.which_bin == 'cmblensplus':
@@ -213,7 +223,7 @@ class RecoBase:
             QU = self.get_sim(idx)*self.extra_mask
             E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
                                          Bl,self.invN,QU,chn=1,itns=[1000],eps=[1e-5],
-                                         filter=filt,ro=10)
+                                         filter=filt,ro=10,inl=self.NL)
             pl.dump((E,B),open(fname,'wb'))
 
         if ret is None:
@@ -267,7 +277,7 @@ class RecoBase:
         if idx in self.mf_array:
             raise ValueError
         return cs.utils.alm2cl(self.Lmax,self.get_qlm_sim(idx)-self.mean_field())/self.fsky - self.MCN0()
-    
+
     def get_qcl_stat(self,n,ret='dl'):
         if ret == 'cl':
             lfac = 1.0
@@ -387,7 +397,6 @@ class RecoBase:
         stat = ana.statistics(ocl=1.,scl=cltp)
         stat.get_amp(fcl=cltp.mean(axis=0))
         return 1/stat.sA
-
 
 
 
