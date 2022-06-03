@@ -33,6 +33,7 @@ class RecoBase:
             assert (cmb_sim_prefix != None) & (cmb_sim_dir != None)
 
         self.lib_dir = lib_dir
+        self.lib_dir_ap = lib_dir_ap
         self.mass_dir = os.path.join(lib_dir,f'MASS_{lib_dir_ap}')
         self.filt_dir = os.path.join(lib_dir,f'CINV_{lib_dir_ap}')
         self.map_dir = os.path.join(lib_dir,f'MAP_{lib_dir_ap}')
@@ -92,6 +93,7 @@ class RecoBase:
             self.invN = np.reshape(np.array((invn,invn)),(2,1,self.npix))
         else:
             ne, nb = pl.load(open(os.path.join(self.lib_dir,noise_spectra),'rb'))
+            ne, nb = ne[:self.lmax+1]*self.beam**2, nb[:self.lmax+1]*self.beam**2
             ne /= self.Tcmb**2
             nb /= self.Tcmb**2
 
