@@ -1,0 +1,158 @@
+from fgbuster import harmonic_ilc_alm,CMB
+import healpy as hp
+import pysm3
+import pysm3.units as u
+import sys
+import curvedsky as cs
+import cmb
+from database import surveys,noise
+import os
+import numpy as np
+from tqdm import tqdm
+from utils import camb_clfile
+import mpi
+import matplotlib.pyplot as plt
+import pickle as pl
+class INST:
+    def __init__(self,beam,frequency):
+        self.Beam = beam
+        self.fwhm = beam
+        self.frequency = frequency
+
+class SimExperimentFG:
+
+    def __init__(self,infolder,outfolder,dnside,maskpath,fwhm,fg_dir,fg_str,table,len_cl_file,Fl=0,Fh=500 ):
+
+        self.infolder = infolder
+        self.outfolder = outfolder
+        self.lmax = (3*dnside)-1
+        self.fwhm = np.radians(fwhm/60)
+        self.fg_dir = fg_dir
+        self.fg_str = fg_str
+        table = surveys().get_table_dataframe(table)
+        self.table = table[(table.frequency>Fl) & (table.frequency<Fh)]
+        self.mask = hp.ud_grade(hp.read_map(maskpath,verbose=False),dnside)
+        self.fsky = np.mean(self.mask)
+        self.dnside = dnside
+        self.Tcmb  = 2.726e6
+        self.cl_len = cmb.read_camb_cls(len_cl_file,ftype='lens',output='array')[:,:self.lmax+1]
+
+        if mpi.rank == 0:
+            os.makedirs(self.outfolder,exist_ok=True)
+        print(f"using {self.infolder} and {self.fg_dir} saving to {self.outfolder}")
+
+    def get_inv_w_noise(self):
+        nP = np.around(noise(np.array(self.table.depth_p)),2)
+        nT = np.around(nP/np.sqrt(2),2)
+        return nT,nP
+
+    def get_cmb(self,idx):
+        fname = os.path.join(self.infolder,f"cmb_sims_{idx:04d}.fits")
+        return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside)
+
+    def get_fg(self,v):
+        fname = os.path.join(self.fg_dir,f"{self.fg_str}_{int(v)}.fits")
+        return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside)
+
+
+    def get_noise(self,depth_i,depth_p):
+        n_pix = hp.nside2npix(self.dnside)
+        res = np.random.normal(size=(n_pix, 3))
+        depth = np.stack((depth_i, depth_p, depth_p))
+        depth *= u.arcmin * u.uK_CMB
+        depth = depth.to(
+            getattr(u, 'uK_CMB') * u.arcmin,
+            equivalencies=u.cmb_equivalencies(0 * u.GHz))
+        res *= depth.value / hp.nside2resol(self.dnside, True)
+        return  res.T
+
+    def get_total_alms(self,idx,v,n_t,n_p,beam):
+        maps = hp.smoothing(self.get_cmb(idx)+self.get_fg(v),fwhm=np.radians(beam/60.)) + self.get_noise(n_t,n_p)
+        alms = hp.map2alm(maps*self.mask)
+        del maps
+        beam = hp.gauss_beam(np.radians(beam/60),lmax=self.lmax,pol=True).T
+        hp.almxfl(alms[0],1/beam[0],inplace=True)
+        hp.almxfl(alms[1],1/beam[1],inplace=True)
+        hp.almxfl(alms[2],1/beam[2],inplace=True)
+        return alms
+
+    def get_noFG_alms(self,idx):
+        fsky = f"{self.fsky:.1f}".replace('.','p')
+        fname = os.path.join(self.outfolder,f"exp_noFG_sims_fsky_{fsky}_{idx:04d}.fits")
+        if os.path.isfile(fname):
+            return hp.read_alm(fname,(1,2,3))
+        else:
+            n_t,n_p = self.get_inv_w_noise()
+            maps = hp.smoothing(self.get_cmb(idx),fwhm=self.fwhm) + self.get_noise(n_t,n_p)
+            alms = hp.map2alm(maps*self.mask)
+            del maps
+            hp.write_alm(fname,alms)
+            return alms
+
+    def get_cinv_sim(self,idx,noFG=False):
+        fsky = f"{self.fsky:.1f}".replace('.','p')
+        _name = "cinv_noFG_sim" if noFG else "cinv_sim"
+        fname = os.path.join(self.outfolder,f"{_name}_fsky_{fsky}_{idx:04d}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            _,sigma = self.get_inv_w_noise()
+            beam = hp.gauss_beam(self.fwhm,lmax=self.lmax,pol=True).T
+            Bl = np.reshape(beam[2],(1,self.lmax+1))
+            invn = self.mask * (np.radians(sigma/60)/self.Tcmb)**-2
+            invN = np.reshape(np.array((invn,invn)),(2,1,hp.nside2npix(self.dnside)))
+            alms = self.get_noFG_alms(idx) if noFG else self.get_comp_sep_alm(idx)
+            T,Q,U = hp.alm2map(alms,self.dnside)
+            QU = np.reshape(np.array((Q,U)),(2,1,hp.nside2npix(self.dnside)))/self.Tcmb
+            E,B = cs.cninv.cnfilter_freq(2,1,self.dnside,self.lmax,self.cl_len[1:3,:],
+                                         Bl,invN,QU,chn=1,itns=[1000],eps=[1e-5],ro=10)
+            pl.dump((E,B),open(fname,'wb'))
+            return E, B
+
+
+
+    def get_alms_arr(self,idx,v,n_t,n_p,beam):
+        arr = []
+        for i in tqdm(range(len(v)),desc="Making alms",unit='Freq'):
+            arr.append(self.get_total_alms(idx,v[i],n_t[i],n_p[i],beam[i]))
+        return np.array(arr)
+
+    def get_comp_sep_alm(self,idx):
+        fsky = f"{self.fsky:.1f}".replace('.','p')
+        fname = os.path.join(self.outfolder,f"exp_sims_fsky_{fsky}_{idx:04d}.fits")
+        if os.path.isfile(fname):
+            return hp.read_alm(fname,(1,2,3))
+        else:
+            freqs = np.array(self.table.frequency)
+            fwhm = np.array(self.table.fwhm)
+            nlev_p = np.array(self.table.depth_p)
+            nlev_t = nlev_p/np.sqrt(2)
+            alms = self.get_alms_arr(idx,freqs,nlev_t,nlev_p,fwhm)
+            instrument = INST(None,freqs)
+            components = [CMB()]
+            bins = np.arange(1000) * 10
+            result = harmonic_ilc_alm(components, instrument,alms,bins)
+            del alms
+            alms = hp.smoothalm([result.s[0][0], result.s[0][1],result.s[0][2]],fwhm=self.fwhm)
+            del result
+            hp.write_alm(fname,alms)
+            return alms
+
+    def get_weights(self,idx):
+        fname = os.path.join(self.outfolder,f"exp_weight_{idx:04d}.pkl")
+        print(f"Getting Weights {idx}")
+        if os.path.isfile(fname):
+            return pk.load(open(fname,'rb'))
+        else:
+            freqs = np.array(self.table.frequency)
+            fwhm = np.array(self.table.fwhm)
+            nlev_p = np.array(self.table.depth_p)
+            nlev_t = nlev_p/np.sqrt(2)
+            alms = self.get_alms_arr(idx,freqs,nlev_t,nlev_p,fwhm)
+            instrument = INST(None,freqs)
+            components = [CMB()]
+            bins = np.arange(1000) * 10
+            result = harmonic_ilc_alm(components, instrument,alms,bins)
+            w = result.W
+            pk.dump(w,open(fname,'wb'))
+            return w
