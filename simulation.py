@@ -56,15 +56,19 @@ class SimExperimentFG:
 
 
     def get_noise(self,depth_i,depth_p):
-        n_pix = hp.nside2npix(self.dnside)
-        res = np.random.normal(size=(n_pix, 3))
-        depth = np.stack((depth_i, depth_p, depth_p))
-        depth *= u.arcmin * u.uK_CMB
-        depth = depth.to(
-            getattr(u, 'uK_CMB') * u.arcmin,
-            equivalencies=u.cmb_equivalencies(0 * u.GHz))
-        res *= depth.value / hp.nside2resol(self.dnside, True)
-        return  res.T
+        # n_pix = hp.nside2npix(self.dnside)
+        # res = np.random.normal(size=(n_pix, 3))
+        # depth = np.stack((depth_i, depth_p, depth_p))
+        # depth *= u.arcmin * u.uK_CMB
+        # depth = depth.to(
+        #     getattr(u, 'uK_CMB') * u.arcmin,
+        #     equivalencies=u.cmb_equivalencies(0 * u.GHz))
+        # res *= depth.value / hp.nside2resol(self.dnside, True)
+        # return  res.T
+        t = hp.synalm(np.ones(self.lmax+1)*(np.radians(depth_i/60)**2),lmax=self.lmax)
+        e = hp.synalm(np.ones(self.lmax+1)*(np.radians(depth_p/60)**2),lmax=self.lmax)
+        b = hp.synalm(np.ones(self.lmax+1)*(np.radians(depth_p/60)**2),lmax=self.lmax)
+        return hp.alm2map([t,e,b],nside=self.dnside)
 
     def get_total_alms(self,idx,v,n_t,n_p,beam):
         maps = hp.smoothing(self.get_cmb(idx)+self.get_fg(v),fwhm=np.radians(beam/60.)) + self.get_noise(n_t,n_p)

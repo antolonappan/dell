@@ -217,15 +217,23 @@ class RecoBase:
         return self.get_exp_sim(idx) if self.FG else self.make_exp_sim(idx)
 
     def get_falm_sim(self,idx,filt='',ret=None):
-        fname = os.path.join(self.filt_dir,f"cinv_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
+        if filt == 'W':
+            fname = os.path.join(self.filt_dir,f"wiener_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
+        else:
+            fname = os.path.join(self.filt_dir,f"cinv_sim_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             E,B = pl.load(open(fname,'rb'))
         else:
             Bl = np.reshape(self.beam,(1,self.lmax+1))
             QU = self.get_sim(idx)*self.extra_mask
-            E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
-                                         Bl,self.invN,QU,chn=1,itns=[1000],eps=[1e-5],
-                                         filter=filt,ro=10,inl=self.NL)
+            if self.NL == 0:
+                E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
+                                             Bl,self.invN,QU,chn=1,itns=[1000],eps=[1e-5],
+                                             filter=filt,ro=10)
+            else:
+                E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
+                                             Bl,self.invN,QU,chn=1,itns=[1000],eps=[1e-5],
+                                             filter=filt,ro=10,inl=self.NL)
             pl.dump((E,B),open(fname,'wb'))
 
         if ret is None:
@@ -251,6 +259,11 @@ class RecoBase:
             glm *= self.norm[:,None]
             pl.dump(glm,open(fname,'wb'))
             return glm
+    def get_qlm_sim_wResp(self,idx):
+        return cs.utils.almxfl(self.Lmax,self.Lmax,self.get_qlm_sim(idx)-self.mean_field(),cli(self.response(idx)))
+
+    def get_qlm_sim_woMF(self,idx):
+        return self.get_qlm_sim(idx) - self.mean_field()
 
     def get_qlm_cross_sim(self,idx):
         assert idx < self.nsim - 1
@@ -275,12 +288,16 @@ class RecoBase:
             m += self.get_qcl_cross_sim(i)
         return m/n
 
-    def get_qcl_sim(self,idx):
+    def get_qcl_sim(self,idx,response=True):
         if idx in self.mf_array:
             raise ValueError
-        return cs.utils.alm2cl(self.Lmax,self.get_qlm_sim(idx)-self.mean_field())/self.fsky - self.MCN0()
+        if response:
+            qlm = self.get_qlm_sim_wResp(idx)
+        else:
+            qlm = self.get_qlm_sim_woMF(idx)
+        return cs.utils.alm2cl(self.Lmax,qlm)/self.fsky - self.MCN0()
 
-    def get_qcl_stat(self,n,ret='dl'):
+    def get_qcl_stat(self,n,ret='dl',response=False):
         if ret == 'cl':
             lfac = 1.0
         elif ret == 'dl':
@@ -289,7 +306,7 @@ class RecoBase:
             raise ValueError
         cl = []
         for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
-            cl.append(self.bin_cell(lfac*self.get_qcl_sim(i)))
+            cl.append(self.bin_cell(lfac*self.get_qcl_sim(i,response)))
         return np.array(cl)
 
 
@@ -324,11 +341,12 @@ class RecoBase:
     def MCN0(self,n=300):
         fname = os.path.join(self.mass_dir,f"MCN0_{n}_fsky_{self.fsky:.2f}.pkl")
         if os.path.isfile(fname):
-            return pl.load(open(fname,'rb'))
+            arr = pl.load(open(fname,'rb'))
         else:
-            arr = self.get_qcl_cross_mean(n)/self.fsky
+            arr = self.get_qcl_cross_mean(n)/self.fsky 
             pl.dump(arr,open(fname,'wb'))
-            return arr
+        arr  += (1/n) * (arr+self.cl_unl['pp'][:self.Lmax+1])
+        return arr
 
     def __get_input_phi_sim__(self,idx):
         fname = os.path.join(self.phi_sim_dir,f"{self.phi_sim_pre}{idx:04d}.fits")
@@ -347,12 +365,24 @@ class RecoBase:
         hp.almxfl(klm,fl,inplace=True)
         klm[0] = 0
         return klm
+    def get_input_phi_cl(self,idx):
+        almi = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,hp.alm2map(self.get_input_phi_sim(idx),self.nside))
+        return cs.utils.alm2cl(self.Lmax,almi)/self.fsky
 
     def get_cl_phi_inXout(self,idx):
         almi = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,hp.alm2map(self.get_input_phi_sim(idx),self.nside))
         almo = self.get_qlm_sim(idx)
 
         return cs.utils.alm2cl(self.Lmax,almi,almo)/self.fsky
+    
+    def response(self,idx):
+        almi = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,hp.alm2map(self.get_input_phi_sim(idx),self.nside))
+        almo = self.get_qlm_sim(idx) - self.mean_field()
+        r =  cs.utils.alm2cl(self.Lmax,almi,almo)/self.fsky/self.cl_unl['pp'][:self.Lmax+1]
+        r[0] = 0
+        r[1] = 0
+        return r
+
 
 
     def SNR_phi(self,n):

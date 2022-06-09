@@ -22,14 +22,17 @@ class Delens:
     def from_ini(cls,ini):
         return cls(RecoBase.from_ini(ini))
 
-    def get_cinv_Emode(self,idx):
-        return self.recon.get_falm_sim(idx,ret='E')
+    def get_wiener_Emode(self,idx):
+        return self.recon.get_falm_sim(idx,filt='W',ret='E')
 
     def get_reconst_phi(self,idx):
         return self.recon.get_qlm_sim(idx) - self.recon.mean_field()
 
-    def get_cinv_phi(self,idx):
-        fname = os.path.join(self.recon.mass_dir,f"phi_cinv_sim_{idx:04d}.pkl")
+    def get_cinv_phi(self,idx,filt='W'):
+        if filt == 'W':
+            fname = os.path.join(self.recon.mass_dir,f"phi_wiener_sim_{idx:04d}.pkl")
+        else:
+            fname = os.path.join(self.recon.mass_dir,f"phi_cinv_sim_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -43,9 +46,17 @@ class Delens:
             inV = np.reshape(np.array((self.recon.mask*self.recon.extra_mask)),(1,1,self.recon.npix))
             filt_phi = cs.cninv.cnfilter_freq(1, 1, self.recon.nside, self.recon.Lmax,
                                               clpp,Bl,inV,
-                                              phi_map,inl=iNL)
+                                              phi_map,filter=filt,inl=iNL)
             pl.dump(filt_phi,open(fname,'wb'))
             return filt_phi
+    def get_wiener_phi(self,idx):
+        clpp = self.recon.cl_unl['pp'][:self.recon.Lmax+1]
+        N0 = self.recon.norm
+        fl = clpp/(clpp+N0)
+        fl[0],fl[1] = 0,0
+        #return cs.utils.almxfl(self.recon.Lmax,self.recon.Lmax,self.get_reconst_phi(idx),fl)
+        return self.get_reconst_phi(idx)*fl[:self.recon.Lmax+1,None]
+
 
     def get_b_template(self,idx):
         fname = os.path.join(self.lib_dir,f"temp_sim_{idx:04d}.pkl")
@@ -53,8 +64,8 @@ class Delens:
             return pl.load(open(fname,'rb'))
         else:
             template = cs.delens.lensingb(self.recon.lmax, 10, self.recon.lmax,
-                                          2, self.recon.Lmax, self.get_cinv_Emode(idx),
-                                          self.get_cinv_phi(idx))
+                                          2, self.recon.Lmax, self.get_wiener_Emode(idx),
+                                          self.get_wiener_phi(idx))
             pl.dump(template,open(fname,'wb'))
             return template
     def get_b_temp_cl(self, idx):
@@ -66,6 +77,14 @@ class Delens:
                                        self.recon.lmax, 2, qu[0][0], qu[1][0])
         del E
         return B
+
+    def get_input_Emode(self,idx):
+        qu = self.recon.get_sim(idx)
+        E,B = cs.utils.hp_map2alm_spin(self.recon.nside, self.recon.lmax,
+                                       self.recon.lmax, 2, qu[0][0], qu[1][0])
+        del B
+        return E
+
     def get_input_clB(self,idx):
         return cs.utils.alm2cl(self.recon.lmax,self.get_input_Bmode(idx))
 
@@ -78,6 +97,6 @@ class Delens:
     def get_delensed_bmode(self,idx):
         return self.get_input_Bmode(idx) - cs.utils.almxfl(self.recon.lmax,self.recon.lmax,
                                                            self.get_b_template(idx),self.get_alpha(idx))
-    
+
     def get_delensed_cl(self,idx):
         return cs.utils.alm2cl(self.recon.lmax,self.get_delensed_bmode(idx))
