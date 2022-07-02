@@ -9,10 +9,12 @@ from database import surveys,noise
 import os
 import numpy as np
 from tqdm import tqdm
-from utils import camb_clfile
+from utils import camb_clfile,cli
 import mpi
 import matplotlib.pyplot as plt
 import pickle as pl
+from fgbuster import (Dust, Synchrotron,  # sky-fitting model
+                      basic_comp_sep)
 class INST:
     def __init__(self,beam,frequency):
         self.Beam = beam
@@ -21,7 +23,7 @@ class INST:
 
 class SimExperimentFG:
 
-    def __init__(self,infolder,outfolder,dnside,maskpath,fwhm,fg_dir,fg_str,table,len_cl_file,Fl=0,Fh=500 ):
+    def __init__(self,infolder,outfolder,dnside,maskpath,fwhm,fg_dir,fg_str,table,len_cl_file,Fl=0,Fh=500,which='hilc' ):
 
         self.infolder = infolder
         self.outfolder = outfolder
@@ -36,6 +38,7 @@ class SimExperimentFG:
         self.dnside = dnside
         self.Tcmb  = 2.726e6
         self.cl_len = cmb.read_camb_cls(len_cl_file,ftype='lens',output='array')[:,:self.lmax+1]
+        self.which = which
 
         if mpi.rank == 0:
             os.makedirs(self.outfolder,exist_ok=True)
@@ -70,26 +73,64 @@ class SimExperimentFG:
         b = hp.synalm(np.ones(self.lmax+1)*(np.radians(depth_p/60)**2),lmax=self.lmax)
         return hp.alm2map([t,e,b],nside=self.dnside)
 
-    def get_total_alms(self,idx,v,n_t,n_p,beam):
-        maps = hp.smoothing(self.get_cmb(idx)+self.get_fg(v),fwhm=np.radians(beam/60.)) + self.get_noise(n_t,n_p)
+    # def get_total_alms(self,idx,v,n_t,n_p,beam):
+    #     maps = hp.smoothing(hp.smoothing(self.get_cmb(idx)+self.get_fg(v),fwhm=np.radians(beam/60.)) + self.get_noise(n_t,n_p),fwhm=self.fwhm)
+    #     alms = hp.map2alm(maps*self.mask)
+    #     del maps
+    #     return alms
+#     def get_total_alms(self,idx,v,n_t,n_p,beam,ret='alm'):
+#         maps = hp.smoothing(self.get_cmb(idx)+self.get_fg(v),fwhm=np.radians(beam/60.)) + self.get_noise(n_t,n_p)
+#         alms = hp.map2alm(maps*self.mask)
+#         del maps
+#         bl = hp.gauss_beam(np.radians(beam/60),self.lmax,pol=True).T
+#         fl = hp.gauss_beam(self.fwhm,self.lmax,pol=True).T
+
+#         hp.almxfl(alms[0],cli(bl[0]),inplace=True)
+#         hp.almxfl(alms[1],cli(bl[1]),inplace=True)
+#         hp.almxfl(alms[2],cli(bl[2]),inplace=True)
+
+#         hp.almxfl(alms[0],fl[0],inplace=True)
+#         hp.almxfl(alms[1],fl[1],inplace=True)
+#         hp.almxfl(alms[2],fl[2],inplace=True)
+#         if ret=='alm':
+#             return alms
+#         else:
+#             return hp.alm2map(alms,self.dnside)
+
+    def get_total_alms(self,idx,v,n_t,n_p,beam,ret='alm'):
+        maps = self.get_cmb(idx)+ self.get_fg(v) + self.get_noise(n_t,n_p)
         alms = hp.map2alm(maps*self.mask)
         del maps
-        beam = hp.gauss_beam(np.radians(beam/60),lmax=self.lmax,pol=True).T
-        hp.almxfl(alms[0],1/beam[0],inplace=True)
-        hp.almxfl(alms[1],1/beam[1],inplace=True)
-        hp.almxfl(alms[2],1/beam[2],inplace=True)
-        return alms
-
+        bl = hp.gauss_beam(np.radians(beam/60),self.lmax)
+        fl = hp.gauss_beam(self.fwhm,self.lmax)
+        Bl = fl/bl
+        hp.almxfl(alms[0],Bl,inplace=True)
+        hp.almxfl(alms[1],Bl,inplace=True)
+        hp.almxfl(alms[2],Bl,inplace=True)
+        if ret=='alm':
+            return alms
+        else:
+            return hp.alm2map(alms,self.dnside)
+        
     def get_noFG_alms(self,idx):
         fsky = f"{self.fsky:.1f}".replace('.','p')
         fname = os.path.join(self.outfolder,f"exp_noFG_sims_fsky_{fsky}_{idx:04d}.fits")
         if os.path.isfile(fname):
             return hp.read_alm(fname,(1,2,3))
         else:
-            n_t,n_p = self.get_inv_w_noise()
-            maps = hp.smoothing(self.get_cmb(idx),fwhm=self.fwhm) + self.get_noise(n_t,n_p)
+            n_t,n_p = 1.52,2.16 #self.get_inv_w_noise()
+            #maps = hp.smoothing(hp.smoothing(self.get_cmb(idx),fwhm=np.radians(.5)) + self.get_noise(n_t,n_p),fwhm=self.fwhm)
+            maps = self.get_cmb(idx) + self.get_noise(n_t,n_p)
             alms = hp.map2alm(maps*self.mask)
             del maps
+            bl = hp.gauss_beam(np.radians(.5),self.lmax)
+            fl = hp.gauss_beam(self.fwhm,self.lmax)
+
+            Bl = fl/bl
+
+            hp.almxfl(alms[0],Bl,inplace=True)
+            hp.almxfl(alms[1],Bl,inplace=True)
+            hp.almxfl(alms[2],Bl,inplace=True)
             hp.write_alm(fname,alms)
             return alms
 
@@ -115,29 +156,50 @@ class SimExperimentFG:
 
 
 
-    def get_alms_arr(self,idx,v,n_t,n_p,beam):
+    def get_alms_arr(self,idx,v,n_t,n_p,beam,ret='alm'):
+        
         arr = []
         for i in tqdm(range(len(v)),desc="Making alms",unit='Freq'):
-            arr.append(self.get_total_alms(idx,v[i],n_t[i],n_p[i],beam[i]))
+            arr.append(self.get_total_alms(idx,v[i],n_t[i],n_p[i],beam[i],ret))
         return np.array(arr)
 
     def get_comp_sep_alm(self,idx):
         fsky = f"{self.fsky:.1f}".replace('.','p')
-        fname = os.path.join(self.outfolder,f"exp_sims_fsky_{fsky}_{idx:04d}.fits")
+        fname = os.path.join(self.outfolder,f"{self.which}_sims_fsky_{fsky}_{idx:04d}.fits")
+        print(fname)
         if os.path.isfile(fname):
-            return hp.read_alm(fname,(1,2,3))
+            if self.which == 'hilc':
+                return hp.read_alm(fname,(1,2,3))
+            elif self.which == 'parametric':
+                alms = hp.read_alm(fname,(1,2,3))
+                fl = hp.gauss_beam(self.fwhm,self.lmax,pol=True).T
+
+                hp.almxfl(alms[0],fl[0],inplace=True)
+                hp.almxfl(alms[1],fl[1],inplace=True)
+                hp.almxfl(alms[2],fl[2],inplace=True)
+                return alms
         else:
             freqs = np.array(self.table.frequency)
             fwhm = np.array(self.table.fwhm)
             nlev_p = np.array(self.table.depth_p)
             nlev_t = nlev_p/np.sqrt(2)
-            alms = self.get_alms_arr(idx,freqs,nlev_t,nlev_p,fwhm)
             instrument = INST(None,freqs)
-            components = [CMB()]
-            bins = np.arange(1000) * 10
-            result = harmonic_ilc_alm(components, instrument,alms,bins)
-            del alms
-            alms = hp.smoothalm([result.s[0][0], result.s[0][1],result.s[0][2]],fwhm=self.fwhm)
+            if self.which == 'hilc':
+                print("Harmonic ILC")
+                alms = self.get_alms_arr(idx,freqs,nlev_t,nlev_p,fwhm)
+                components = [CMB()]
+                bins = np.arange(1000) * 10
+                result = harmonic_ilc_alm(components, instrument,alms,bins)
+                del alms
+                alms = [result.s[0][0], result.s[0][1],result.s[0][2]]
+            elif self.which == 'parametric':
+                print("Parametric Method")
+                maps = self.get_alms_arr(idx,freqs,nlev_t,nlev_p,fwhm,'map')
+                components = [CMB(),Dust(150.), Synchrotron(20.)]
+                result = basic_comp_sep(components, instrument, maps)
+                alms = hp.map2alm([result.s[0][0], result.s[0][1],result.s[0][2]])
+            else:
+                raise NotImplementedError
             del result
             hp.write_alm(fname,alms)
             return alms
