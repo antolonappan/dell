@@ -1,7 +1,7 @@
 import curvedsky as cs
 import mpi
 import numpy as np
-from quest import RecoBase
+from workspace.LBlens.old_reco import RecoBase
 import os
 import toml
 import pickle as pl
