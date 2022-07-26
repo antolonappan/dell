@@ -223,12 +223,17 @@ class SimExperimentFG:
     def plot_cl(self,idx):
         cmb = self.get_cleaned_cmb(idx)
         noise = self.get_noise_cmb(idx)
+        clee = hp.alm2cl(cmb[1])
         clbb = hp.alm2cl(cmb[2])
         clbb_noise = hp.alm2cl(noise[2])
+        clee_noise = hp.alm2cl(noise[1])
         plt.figure(figsize=(8,8))
-        plt.loglog(clbb,label="CMB")
-        plt.loglog(clbb_noise,label="Noise")
-        plt.loglog(self.cl_len[2,:]*self.Tcmb**2 ,label="True")
+        plt.loglog(clbb,label="BB")
+        plt.loglog(clbb_noise,label="BB noise")
+        plt.loglog(clee,label="EE")
+        plt.loglog(clee_noise,label="EE noise")
+        plt.loglog(self.cl_len[2,:]*self.Tcmb**2 ,label="BB CAMB")
+        plt.loglog(self.cl_len[1,:]*self.Tcmb**2 ,label="EE CAMB")
         plt.legend()
 
     def noise_mean_mpi(self):

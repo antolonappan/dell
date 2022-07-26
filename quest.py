@@ -40,6 +40,7 @@ class Reconstruction:
         self.nside = self.filt_lib.nside
         self.cl_len = self.filt_lib.cl_len[:,:self.Lmax+1]
         self.cl_pp = camb_clfile(cl_unl)['pp'][:self.Lmax+1]
+        self.cl_unl = camb_clfile(cl_unl)
         self.beam = self.filt_lib.beam[:self.Lmax+1]
         self.Tcmb = self.filt_lib.Tcmb
         self.nsim = self.filt_lib.nsim
@@ -297,6 +298,19 @@ class Reconstruction:
         stat = ana.statistics(ocl=1.,scl=cl_pp)
         stat.get_amp(fcl=cl_pp.mean(axis=0))
         return 1/stat.sA
+
+    def get_tXphi(self,idx):
+        clpp = self.cl_unl['pp'][:self.Lmax+1]/self.Tcmb**2
+        cltt = self.cl_unl['tt'][:self.Lmax+1]/self.Tcmb**2
+        cltp = self.cl_unl['tp'][:self.Lmax+1]/self.Tcmb**2
+        Plm = self.get_input_phi_sim(idx)
+        Tlm = cs.utils.gauss2alm_const(self.Lmax,clpp,cltt,cltp,Plm)
+        del Plm
+        tmap = cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,Tlm[1])*self.mask
+        del Tlm
+        Tlm = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,tmap)
+        Plm = self.get_qlm_sim(idx)/self.Tcmb
+        return cs.utils.alm2cl(self.Lmax,Tlm,Plm)/self.fsky
 
 
 
