@@ -15,6 +15,16 @@ import binning
 
 
 class Reconstruction:
+    """
+    Class to reconstruct the lensing potentials from the filtered CMB fields.
+
+    filt_lib: class object : filtering.Filtering 
+    Lmax: int : maximum multipole of the reconstruction
+    rlmin: int : minimum multipole of CMB for the reconstruction
+    rlmax: int : maximum multipole of CMB for the reconstruction
+    cl_unl: str : path to the unlensed CMB power spectrum
+    nbins: int : number of bins for the multipole binning
+    """
 
     def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins):
         self.filt_lib = filt_lib
@@ -58,10 +68,15 @@ class Reconstruction:
         
     
     def bin_cell(self,arr):
+        """
+        binning function for the multipole bins
+        """
         return binning.binning(arr,self.binner)
 
     @classmethod
     def from_ini(cls,ini_file):
+        """
+        Load the reconstruction object from a ini file."""
         filt_lib = Filtering.from_ini(ini_file)
         config = toml.load(ini_file)
         rc = config['Reconstruction']
@@ -74,6 +89,10 @@ class Reconstruction:
 
     @property
     def __observed_spectra__(self):
+        """
+        Calculate the expected observed spectra using ILC noise
+        and effective beam
+        """
         ocl = self.cl_len.copy()
         nt,ne,nb = self.filt_lib.sim_lib.noise_spectra(500)
         bt,be,bb = self.filt_lib.sim_lib.beam_spectra(500)
@@ -83,6 +102,9 @@ class Reconstruction:
         return ocl
     
     def test_obs_for_norm(self):
+        """
+        Test the observed spectra for the normalization is visually acceptable.
+        """
         obs = self.__observed_spectra__.copy()
         cmb,_,_ = self.filt_lib.sim_lib.get_cmb_alms(0)
         plt.figure(figsize=(8,8))
@@ -95,6 +117,9 @@ class Reconstruction:
 
     @property
     def get_norm(self):
+        """
+        Normalization of the reconstruction.
+        """
         ocl = self.__observed_spectra__
         Ag, Ac = cs.norm_quad.qeb('lens',self.Lmax,self.rlmin,
                                   self.rlmax,self.cl_len[1,:],
@@ -103,6 +128,9 @@ class Reconstruction:
         return Ag
 
     def get_phi(self,idx):
+        """
+        Reconstruct the potential using filtered Fields.
+        """
         fname = os.path.join(self.plm_dir,f"phi_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
@@ -118,6 +146,10 @@ class Reconstruction:
             return glm
 
     def get_phi_cross(self,idx):
+        """
+        Reconstruct the potential using filtered Fields with different CMB fields
+        If E modes is from ith simulation then B modes is from (i+1)th simulation
+        """
         myidx = np.pad(np.arange(self.nsim),(0,1),'constant',constant_values=(0,0))
         fname = os.path.join(self.px_dir,f"phi_cross_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
@@ -135,18 +167,27 @@ class Reconstruction:
             return glm
     
     def job_phi(self):
+        """
+        MPI job for the potential reconstruction.
+        """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             phi = self.get_phi(i)
         mpi.barrier()
     
     def job_phi_cross(self):
+        """
+        MPI job for the potential reconstruction with different CMB fields.
+        """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             phi = self.get_phi_cross(i)
         mpi.barrier()
 
     def mean_field(self):
+        """
+        Calcualte the mean field.
+        """
         fname = os.path.join(self.lib_dir,f"MF_fsky_{self.fsky:.2f}_{hash_array(self.mf_array)}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
@@ -159,9 +200,15 @@ class Reconstruction:
             return arr
     
     def mean_field_cl(self):
+        """
+        Mean field cl
+        """
         return cs.utils.alm2cl(self.Lmax,self.mean_field())/self.fsky
 
     def get_phi_cl(self,idx):
+        """
+        Get the cl of the potential.
+        """
         if idx in self.mf_array:
             raise ValueError("Simulation already in mean field array")
         else:
@@ -169,6 +216,9 @@ class Reconstruction:
 
 
     def get_input_phi_sim(self,idx):
+        """
+        Get the masked input potential alms
+        """
         dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
         fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
         fnamet = os.path.join(self.in_dir,f"phi_sims_{idx:04d}.pkl")
@@ -185,21 +235,37 @@ class Reconstruction:
             return plm_n
 
     def job_input_phi(self):
+        """
+        MPI job for the input potential reconstruction.
+        """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             phi = self.get_input_phi_sim(i)
         mpi.barrier()
 
     def get_input_phi_cl(self,idx):
+        """
+        Get the cl of the input potential.
+        """
         return cs.utils.alm2cl(self.Lmax,self.Lmax,self.get_input_phi_sim(idx))
 
 
     def get_cl_phi_inXout(self,idx):
+        """
+        get input X output potential
+        """
+
         almi = self.get_input_phi_sim(idx)
         almo = self.get_phi(idx) - self.mean_field()
         return cs.utils.alm2cl(self.Lmax,almi,almo)/self.fsky
     
     def response(self,idx):
+        """
+        Calculate the responce
+
+        r = cl^{cross} / cl^{input}
+        """
+
         fname = os.path.join(self.rp_dir,f"response_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
@@ -213,6 +279,9 @@ class Reconstruction:
             return r
     
     def response_mean(self):
+        """
+        Mean of response for all simulations
+        """
         fname = os.path.join(self.lib_dir,f"response_fsky_{self.fsky:.2f}_mean.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
@@ -226,18 +295,28 @@ class Reconstruction:
 
 
     def job_response(self):
+        """
+        MPI job for the response calculation.
+        """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             Null = self.response(i)
         mpi.barrier()
     
     def get_qcl(self,idx):
+        """
+        Get the cl_phi = cl_recon - N0 - mean_field
+        """
         return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl()
 
     def get_qcl_wR(self,idx):
+        """
+        Get the cl_phi = (cl_recon - N0 - mean_field)/ response*82
+        """
         return self.get_qcl(idx)/self.response_mean()**2
     
     def get_qcl_wR_stat(self,n=400,ret='dl'):
+
 
         if ret == 'cl':
             lfac = 1.0
@@ -300,17 +379,45 @@ class Reconstruction:
         return 1/stat.sA
 
     def get_tXphi(self,idx):
-        clpp = self.cl_unl['pp'][:self.Lmax+1]/self.Tcmb**2
-        cltt = self.cl_unl['tt'][:self.Lmax+1]/self.Tcmb**2
-        cltp = self.cl_unl['tp'][:self.Lmax+1]/self.Tcmb**2
+        """
+        Get the Cl_{temp, phi}
+        """
+        clpp = self.cl_unl['pp'][:self.Lmax+1]
+        cltt = self.cl_unl['tt'][:self.Lmax+1]
+        cltp = self.cl_unl['tp'][:self.Lmax+1]
         Plm = self.get_input_phi_sim(idx)
         Tlm = cs.utils.gauss2alm_const(self.Lmax,clpp,cltt,cltp,Plm)
         del Plm
         tmap = cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,Tlm[1])*self.mask
         del Tlm
         Tlm = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,tmap)
-        Plm = self.get_qlm_sim(idx)/self.Tcmb
+        Plm = self.get_phi(idx) - self.mean_field()
         return cs.utils.alm2cl(self.Lmax,Tlm,Plm)/self.fsky
+    
+    def tXphi_stat(self,n):
+        fname = os.path.join(self.lib_dir,f"tXphi_{n}_{hash_array(self.B)}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            cl = []
+            for i in tqdm(range(n), desc='Calculating TempXphi',unit='simulation'):
+                cl.append(self.bin_cell(self.get_tXphi(i)))
+            cl = np.array(cl)
+            pl.dump(cl,open(fname,'wb'))
+            return cl
+
+    def plot_tXphi_stat(self,n):
+        cl = self.tXphi_stat(n)
+        plt.errorbar(self.B,cl.mean(axis=0),yerr=cl.std(axis=0))
+        plt.plot(self.L,self.cl_unl['tp'][:self.Lmax+1])
+        plt.semilogy()
+        plt.xlim(2,100)
+
+    def SNR_tp(self,n):
+        cltp = self.tXphi_stat(n)[:,:]
+        stat = ana.statistics(ocl=1.,scl=cltp)
+        stat.get_amp(fcl=cltp.mean(axis=0))
+        return 1/stat.sA
 
 
 

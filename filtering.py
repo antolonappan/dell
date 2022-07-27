@@ -12,6 +12,13 @@ from utils import camb_clfile,cli
 from simulation import SimExperimentFG
 
 class Filtering:
+    """
+    Filtering class for component separated CMB Maps
+
+    sim_lib : object : simulation.SimExperimentFG- simulaiton library
+    maskpath : string : path to mask
+    beam : float : beam size in arcmin
+    """
     def __init__(self,sim_lib,maskpath,beam):
 
         self.sim_lib = sim_lib
@@ -37,6 +44,9 @@ class Filtering:
 
     @classmethod
     def from_ini(cls,ini_file):
+        """
+        class method to create Filtering object from ini file
+        """
         sim_lib = SimExperimentFG.from_ini(ini_file)
         config = toml.load(ini_file)
         fc = config['Filtering']
@@ -45,6 +55,9 @@ class Filtering:
         return cls(sim_lib,maskpath,beam)
 
     def convolved_TEB(self,idx):
+        """
+        convolve the component separated map with the beam
+        """
         T,E,B = self.sim_lib.get_cleaned_cmb(idx)
         hp.almxfl(T,self.beam,inplace=True)
         hp.almxfl(E,self.beam,inplace=True)
@@ -52,11 +65,18 @@ class Filtering:
         return T,E,B
 
     def TQU_to_filter(self,idx):
+        """
+        Change the convolved ALMs to MAPS
+        """
         T,E,B = self.convolved_TEB(idx)
         return hp.alm2map([T,E,B],nside=self.nside)
 
     @property
     def NL(self):
+        """
+        array manipulation of noise spectra obtained by ILC weight
+        for the filtering process
+        """
         nt,ne,nb = self.sim_lib.noise_spectra(500)
         return np.reshape(np.array((cli(ne[:self.lmax+1]/self.Tcmb**2),
                           cli(nb[:self.lmax+1]/self.Tcmb**2))),(2,1,self.lmax+1))
@@ -64,6 +84,9 @@ class Filtering:
 
 
     def cinv_EB(self,idx,test=False):
+        """
+        C inv Filter for the component separated maps
+        """
         fsky = f"{self.fsky:.2f}".replace('.','p')
         fname = os.path.join(self.lib_dir,f"cinv_EB_{idx:04d}_fsky_{fsky}.pkl")
         if not os.path.isfile(fname):
@@ -89,6 +112,9 @@ class Filtering:
         return E,B
 
     def plot_cinv(self,idx):
+        """
+        plot the cinv filtered Cls for a given idx
+        """
         E,B = self.cinv_EB(idx)
         clb = cs.utils.alm2cl(self.lmax,B)
         plt.figure(figsize=(8,8))
@@ -97,9 +123,16 @@ class Filtering:
  
 
     def wiener_EB(self,idx):
+        """
+        Not implementer yet
+        useful for delensing
+        """
         pass
 
     def run_job(self):
+        """
+        MPI job for filtering
+        """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             eb = self.cinv_EB(i)

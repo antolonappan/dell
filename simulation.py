@@ -23,6 +23,21 @@ class INST:
         self.frequency = frequency
 
 class SimExperimentFG:
+    """
+    Simulation Library
+    ******************
+    infolder : str : path to the folder containing the CMB only simulation .fits files
+    outfolder: str : path to the folder where the component separated simulation will be saved
+    dnside: int : resolution of the maps
+    fg_dir: str : path to the folder containing the foreground simulation .fits files
+    fg_str: str : string to identify the foreground simulation
+    table : str : table containing the survey information
+    len_cl_file: str : path to the lensing cl file
+    nsim: int : number of simulations to be generated
+    Fl: float : lower frequency limit
+    Fh: float : higher frequency limit
+    noFG: bool : if True, no foreground is used
+    """
 
     def __init__(self,infolder,outfolder,dnside,fg_dir,fg_str,table,len_cl_file,nsim,Fl=0,Fh=500,noFG=False):
 
@@ -53,6 +68,9 @@ class SimExperimentFG:
 
     @classmethod
     def from_ini(cls,ini_file):
+        """
+        Initialize the class from an ini file
+        """
         config = toml.load(ini_file)
         mc = config['Map']
         infolder = mc['infolder']
@@ -71,19 +89,31 @@ class SimExperimentFG:
 
 
     def get_inv_w_noise(self):
+        """
+        Get the inverse weighted noise level
+        """
         nP = np.around(noise(np.array(self.table.depth_p)),2)
         nT = np.around(nP/np.sqrt(2),2)
         return nT,nP
 
     def get_cmb(self,idx):
+        """
+        Get the CMB map of the given simulation
+        """
         fname = os.path.join(self.infolder,f"cmb_sims_{idx:04d}.fits")
         return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside)
 
     def get_fg(self,v):
+        """
+        Get the foreground map
+        """
         fname = os.path.join(self.fg_dir,f"{self.fg_str}_{int(v)}.fits")
         return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside)
 
     def convolved_cmb_fg_vect(self,idx):
+        """
+        frequency maps of  cmb + foreground convolved with the beam
+        """
         fname = os.path.join(self.mapfolder,f"tmp_cmb_{idx:04d}.pkl")
         if not os.path.exists(fname):
             V = np.array(self.table.frequency)
@@ -97,6 +127,10 @@ class SimExperimentFG:
         return np.array(maps)
     
     def convolved_cmb_vect(self,idx):
+        """
+        frequency maps of  cmb convolved with the beam
+
+        """
         fname = os.path.join(self.mapfolder,f"tmp_cmb_{idx:04d}.pkl")
         if not os.path.exists(fname):
             Beam = np.array(self.table.fwhm)
@@ -109,6 +143,9 @@ class SimExperimentFG:
         return np.array(maps)
 
     def get_noise_map(self,idx):
+        """
+        Noise map of all frequency channels of the given simulation
+        """
         fname = os.path.join(self.noisefolder,f"tmp_noise_{idx:04d}.pkl")
         if not os.path.exists(fname):
             depth_p =np.array(self.table.depth_p)
@@ -130,6 +167,9 @@ class SimExperimentFG:
         return noise
 
     def get_cmb_alms(self,idx,ret=0):
+        """
+        Harmonic ILC component seperated CMB alms
+        """
         mapfile = os.path.join(self.mapfolder,f"sims_{idx:04d}.fits")
         noisefile = os.path.join(self.noisefolder,f"sims_{idx:04d}.fits")
         weightfile = os.path.join(self.weightfolder,f"sims_{idx:04d}.pkl")
@@ -191,7 +231,10 @@ class SimExperimentFG:
     
         
 
-    def apply_harmonic_W(self,W, alms):  
+    def apply_harmonic_W(self,W, alms): 
+        """
+        Helper function to apply the harmonic weights to the alms
+        """ 
         lmax = hp.Alm.getlmax(alms.shape[-1])
         res = np.full((W.shape[-2],) + alms.shape[1:], np.nan, dtype=alms.dtype)
         start = 0
@@ -204,19 +247,32 @@ class SimExperimentFG:
         return res
 
     def run_job(self):
+        """
+        MPI Job to run the component seperation
+        """
         jobs = np.arange(mpi.size)
         for i in jobs[mpi.rank::mpi.size]:
             Null = self.get_cmb_alms(i)
 
     def get_cleaned_cmb(self,idx):
+        """
+        To read the cleaned cmb map
+        """
+
         alms = hp.read_alm(os.path.join(self.mapfolder,f"sims_{idx:04d}.fits"),(1,2,3))
         return alms
     
     def get_noise_cmb(self,idx):
+        """
+        To read the noise cmb map
+        """
         alms = hp.read_alm(os.path.join(self.noisefolder,f"sims_{idx:04d}.fits"),(1,2,3))
         return alms
 
     def get_weights_cmb(self,idx):
+        """
+        To read the weights cmb map
+        """
         weights = pl.load(open(os.path.join(self.weightfolder,f"sims_{idx:04d}.pkl"),"rb"))
         return weights
     
@@ -237,6 +293,9 @@ class SimExperimentFG:
         plt.legend()
 
     def noise_mean_mpi(self):
+        """
+        MPI Job to calculate the noise mean
+        """
         fname = os.path.join(self.outfolder,f"noise_mean_{mpi.size}.pkl")
         if not os.path.isfile(fname):
             noise_alm = self.get_noise_cmb(mpi.rank)
@@ -266,6 +325,9 @@ class SimExperimentFG:
             mpi.barrier()
     
     def noise_spectra(self,num):
+        """
+        To read the noise mean
+        """
         fname = os.path.join(self.outfolder,f"noise_mean_{num}.pkl")
         return  pl.load(open(fname,'rb'))
         
@@ -283,6 +345,9 @@ class SimExperimentFG:
         plt.legend()
 
     def get_beam_sim(self,idx):
+        """
+        To get the Effective beam for the simulation using ILC weights
+        """
         W = self.get_weights_cmb(idx)
         Wt = W[0]
         We = W[1]
@@ -304,6 +369,9 @@ class SimExperimentFG:
         return bl_tt,bl_ee,bl_bb
 
     def beam_mean_mpi(self):
+        """
+        MPI Job to calculate the effective beam mean
+        """
         fname = os.path.join(self.outfolder,f"beam_mean_{mpi.size}.pkl")
         if not os.path.isfile(fname):
             bt,be,bb = self.get_beam_sim(mpi.rank)
@@ -329,6 +397,9 @@ class SimExperimentFG:
             mpi.barrier()
 
     def beam_spectra(self,num):
+        """
+        To read the effective beam mean
+        """
         fname = os.path.join(self.outfolder,f"beam_mean_{num}.pkl")
         return  pl.load(open(fname,'rb'))
 
