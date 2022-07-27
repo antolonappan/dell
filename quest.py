@@ -26,7 +26,7 @@ class Reconstruction:
     nbins: int : number of bins for the multipole binning
     """
 
-    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins):
+    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins):
         self.filt_lib = filt_lib
  
 
@@ -62,8 +62,11 @@ class Reconstruction:
         self.mf_array = np.arange(400,500)
 
         self.nbins = nbins
+        self.tp_nbins = tp_nbins
         self.binner = binning.multipole_binning(self.nbins,lmin=2,lmax=self.Lmax)
+        self.binnertp = None#binning.multipole_binning(self.tp_nbins,lmin=2,lmax=self.Lmax)
         self.B = self.binner.bc
+        self.Btp = None#self.binnertp.bc
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
         
     
@@ -72,6 +75,12 @@ class Reconstruction:
         binning function for the multipole bins
         """
         return binning.binning(arr,self.binner)
+    
+    def bin_cell_tp(self,arr):
+        """
+        binning function for the multipole bins
+        """
+        return binning.binning(arr,self.binnertp)
 
     @classmethod
     def from_ini(cls,ini_file):
@@ -85,7 +94,8 @@ class Reconstruction:
         rlmax = rc['cmb_lmax']
         cl_unl = rc['cl_unl']
         nbins = rc['nbins']
-        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins)
+        tp_nbins = rc['nbins_tp']
+        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins)
 
     @property
     def __observed_spectra__(self):
@@ -198,6 +208,30 @@ class Reconstruction:
             arr /= len(self.mf_array)
             pl.dump(arr,open(fname,'wb'))
             return arr
+
+    def __kfac__(self):
+        nhl = self.MCN0()
+        fl = self.cl_pp/(self.cl_pp+ nhl )
+        fl[0] = 0
+        fl[1] = 0
+        return fl
+
+    def wf_phi(self,idx):
+        phi = self.get_phi(idx) - self.mean_field()
+        return cs.utils.almxfl(self.Lmax,self.Lmax,phi,self.__kfac__())
+    
+    def deflection_angle(self,idx):
+        """
+        Calculate the deflection angle.
+        """
+        wfphi = self.wf_phi(idx)
+        dl = np.sqrt(np.arange(self.Lmax + 1, dtype=float) * np.arange(1, self.Lmax + 2))
+        return cs.utils.almxfl(self.Lmax,self.Lmax,wfphi,dl)
+
+
+
+    
+    
     
     def mean_field_cl(self):
         """
@@ -395,13 +429,13 @@ class Reconstruction:
         return cs.utils.alm2cl(self.Lmax,Tlm,Plm)/self.fsky
     
     def tXphi_stat(self,n):
-        fname = os.path.join(self.lib_dir,f"tXphi_{n}_{hash_array(self.B)}.pkl")
+        fname = os.path.join(self.lib_dir,f"tXphi_{n}_{hash_array(self.Btp)}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
             cl = []
             for i in tqdm(range(n), desc='Calculating TempXphi',unit='simulation'):
-                cl.append(self.bin_cell(self.get_tXphi(i)))
+                cl.append(self.bin_cell_tp(self.get_tXphi(i)))
             cl = np.array(cl)
             pl.dump(cl,open(fname,'wb'))
             return cl
