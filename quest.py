@@ -1,3 +1,4 @@
+from cProfile import label
 import os
 import healpy as hp
 import mpi
@@ -33,7 +34,8 @@ class Reconstruction:
         self.Lmax = Lmax
         self.rlmin = rlmin
         self.rlmax = rlmax
-        self.lib_dir = os.path.join(self.filt_lib.sim_lib.outfolder,'Reconstruction')
+        self.lib_dir = os.path.join(self.filt_lib.sim_lib.outfolder,
+                                    f'Reconstruction_{self.rlmin}_{self.rlmax}')
         self.in_dir = os.path.join(self.lib_dir,'input')
         self.plm_dir = os.path.join(self.lib_dir,'plm')
         self.px_dir = os.path.join(self.lib_dir,'px')
@@ -64,9 +66,9 @@ class Reconstruction:
         self.nbins = nbins
         self.tp_nbins = tp_nbins
         self.binner = binning.multipole_binning(self.nbins,lmin=2,lmax=self.Lmax)
-        self.binnertp = None#binning.multipole_binning(self.tp_nbins,lmin=2,lmax=self.Lmax)
+        self.binnertp = binning.multipole_binning(self.tp_nbins,lmin=2,lmax=self.Lmax)
         self.B = self.binner.bc
-        self.Btp = None#self.binnertp.bc
+        self.Btp = self.binnertp.bc
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
         
     
@@ -103,14 +105,34 @@ class Reconstruction:
         Calculate the expected observed spectra using ILC noise
         and effective beam
         """
+        fg = False
+        cmb = False
         ocl = self.cl_len.copy()
-        nt,ne,nb = self.filt_lib.sim_lib.noise_spectra(500)
-        bt,be,bb = self.filt_lib.sim_lib.beam_spectra(500)
-        ocl[0,:]  += (nt[:self.Lmax+1]/self.Tcmb**2)/bt[:self.Lmax+1]**2
-        ocl[1,:]  += (ne[:self.Lmax+1]/self.Tcmb**2)/be[:self.Lmax+1]**2
-        ocl[2,:]  += (nb[:self.Lmax+1]/self.Tcmb**2)/bb[:self.Lmax+1]**2
+        nt,ne,nb = self.filt_lib.sim_lib.noise_spectra(self.filt_lib.sim_lib.nsim)
+        bt,be,bb = self.filt_lib.sim_lib.beam_spectra(self.filt_lib.sim_lib.nsim)
+        #(nb[:self.Lmax+1]/self.Tcmb**2)/bb[:self.Lmax+1]**2
+        if fg:
+            print('fg_res included in response')
+            ft,fe,fb = self.filt_lib.sim_lib.fg_res_mean(500)
+            ocl[0,:] += ft[:self.Lmax+1]*bt[:self.Lmax+1]**2
+            ocl[1,:] += fe[:self.Lmax+1]*be[:self.Lmax+1]**2
+            ocl[2,:] += fb[:self.Lmax+1]*bb[:self.Lmax+1]**2
+
+        ocl[0,:] += nt[:self.Lmax+1]/bt[:self.Lmax+1]**2
+        ocl[1,:] += ne[:self.Lmax+1]/be[:self.Lmax+1]**2
+        ocl[2,:] += nb[:self.Lmax+1]/bb[:self.Lmax+1]**2
+
+        if cmb:
+            print('cmb included in response')
+            ctt,cee,cbb = self.filt_lib.sim_lib.cmb_mean(500)
+            ocl = np.zeros_like(ocl)
+            ocl[0,:] += ctt[:self.Lmax+1]
+            ocl[1,:] += cee[:self.Lmax+1]
+            ocl[2,:] += cbb[:self.Lmax+1]
         return ocl
-    
+
+
+
     def test_obs_for_norm(self):
         """
         Test the observed spectra for the normalization is visually acceptable.
@@ -118,11 +140,14 @@ class Reconstruction:
         obs = self.__observed_spectra__.copy()
         cmb,_,_ = self.filt_lib.sim_lib.get_cmb_alms(0)
         plt.figure(figsize=(8,8))
-        plt.loglog(hp.alm2cl(cmb[1])/self.Tcmb**2)
-        plt.loglog(hp.alm2cl(cmb[2])/self.Tcmb**2)
-        plt.loglog(obs[1,:])
-        plt.loglog(obs[2,:])
+        plt.loglog(hp.alm2cl(cmb[1])/self.Tcmb**2,label='HILC EE')
+        plt.loglog(hp.alm2cl(cmb[2])/self.Tcmb**2,label='HILC BB')
+        plt.loglog(self.cl_len[2,:],label='BB')
+        plt.loglog(obs[1,:],label='EE + FG res + ILC noise/ILC beam^2')
+        plt.loglog(obs[2,:], label='BB + FG res + ILC noise/ILC beam^2')
         plt.axhline(np.radians(2.16/60)**2 /self.Tcmb**2)
+        plt.xlim(100,None)
+        plt.legend(fontsize=12)
 
 
     @property
@@ -206,7 +231,8 @@ class Reconstruction:
             for i in tqdm(self.mf_array,desc="Calculating Mean Field",unit='Simulation'):
                 arr += self.get_phi(i)
             arr /= len(self.mf_array)
-            pl.dump(arr,open(fname,'wb'))
+            if mpi.rank == 0:
+                pl.dump(arr,open(fname,'wb'))
             return arr
 
     def __kfac__(self):
@@ -253,8 +279,14 @@ class Reconstruction:
         """
         Get the masked input potential alms
         """
-        dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
-        fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
+        if self.nsim <200:
+            print("input phi is constant")
+            dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps_c/MASS"
+            fname = os.path.join(dir_,f"phi_sims.fits")
+        else:
+            print("input phi is from variying")
+            dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
+            fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
         fnamet = os.path.join(self.in_dir,f"phi_sims_{idx:04d}.pkl")
         if os.path.isfile(fnamet):
             return pl.load(open(fnamet,'rb'))
@@ -281,7 +313,7 @@ class Reconstruction:
         """
         Get the cl of the input potential.
         """
-        return cs.utils.alm2cl(self.Lmax,self.Lmax,self.get_input_phi_sim(idx))
+        return cs.utils.alm2cl(self.Lmax,self.get_input_phi_sim(idx))
 
 
     def get_cl_phi_inXout(self,idx):
@@ -290,7 +322,7 @@ class Reconstruction:
         """
 
         almi = self.get_input_phi_sim(idx)
-        almo = self.get_phi(idx) - self.mean_field()
+        almo = self.get_phi(idx) #- self.mean_field()
         return cs.utils.alm2cl(self.Lmax,almi,almo)/self.fsky
     
     def response(self,idx):
@@ -305,7 +337,7 @@ class Reconstruction:
             return pl.load(open(fname,'rb'))
         else:
             almi = self.get_input_phi_sim(idx)
-            almo = self.get_phi(idx) - self.mean_field()
+            almo = self.get_phi(idx) # - self.mean_field()
             r =  cs.utils.alm2cl(self.Lmax,almi,almo)/cs.utils.alm2cl(self.Lmax,almi)
             r[0] = 0
             r[1] = 0
@@ -384,7 +416,7 @@ class Reconstruction:
             pl.dump(arr,open(fname,'wb'))
 
         arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
-        return arr
+        return arr/self.response_mean()**2
 
     def get_qcl_stat(self,n=400,ret='dl',recache=False):
         fname = os.path.join(self.lib_dir,f"qcl_stat{self.nbins}_{n}_fsky_{self.fsky:.2f}_{ret}.pkl")

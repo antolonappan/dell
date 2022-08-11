@@ -77,7 +77,7 @@ class Filtering:
         array manipulation of noise spectra obtained by ILC weight
         for the filtering process
         """
-        nt,ne,nb = self.sim_lib.noise_spectra(500)
+        nt,ne,nb = self.sim_lib.noise_spectra(self.sim_lib.nsim)
         return np.reshape(np.array((cli(ne[:self.lmax+1]/self.Tcmb**2),
                           cli(nb[:self.lmax+1]/self.Tcmb**2))),(2,1,self.lmax+1))
 

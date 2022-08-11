@@ -13,6 +13,7 @@ from utils import camb_clfile,cli
 import mpi
 import matplotlib.pyplot as plt
 import pickle as pl
+import lenspyx
 import toml
 
 
@@ -329,7 +330,7 @@ class SimExperimentFG:
         To read the noise mean
         """
         fname = os.path.join(self.outfolder,f"noise_mean_{num}.pkl")
-        return  pl.load(open(fname,'rb'))
+        return  np.array(pl.load(open(fname,'rb')))/self.Tcmb**2
         
     
     def plot_noise_spectra(self,num):
@@ -348,6 +349,7 @@ class SimExperimentFG:
         """
         To get the Effective beam for the simulation using ILC weights
         """
+        print("Getting beam for simulation")
         W = self.get_weights_cmb(idx)
         Wt = W[0]
         We = W[1]
@@ -402,11 +404,231 @@ class SimExperimentFG:
         """
         fname = os.path.join(self.outfolder,f"beam_mean_{num}.pkl")
         return  pl.load(open(fname,'rb'))
-
     
-
-
+    def fg_vect(self):
+        """
+        To get all foreground alms
+        """
+        fg_alm = []
+        for v in tqdm(np.array(self.table.frequency),desc="Getting Foreground",unit="freq",):
+            fg_alm.append(hp.map2alm(self.get_fg(v)))
         
+        return np.array(fg_alm)
+
+    def fg_res(self,idx):
+        """
+        To get the foreground residuals
+        """
+        fg_alm = self.fg_vect()
+        fg_res = self.apply_harmonic_W(self.get_weights_cmb(idx),fg_alm)
+        del fg_alm
+        return fg_res
+
+    def fg_res_mean_mpi(self):
+        """
+        MPI Job to calculate the foreground residual mean
+        """
+        fname = os.path.join(self.outfolder,f"fg_res_mean_{mpi.size}.pkl")
+        if not os.path.isfile(fname):
+            fg_res = self.fg_res(mpi.rank)[0]
+            ft = hp.alm2cl(fg_res[0])
+            fe = hp.alm2cl(fg_res[1])
+            fb = hp.alm2cl(fg_res[2])
+            del fg_res
+            if mpi.rank == 0:
+                total_ft = np.zeros(ft.shape)
+                total_fe = np.zeros(fe.shape)
+                total_fb = np.zeros(fb.shape)
+            else:
+                total_ft = None
+                total_fe = None
+                total_fb = None
+            
+            mpi.com.Reduce(ft,total_ft, op=mpi.mpi.SUM,root=0)
+            mpi.com.Reduce(fe,total_fe, op=mpi.mpi.SUM,root=0)
+            mpi.com.Reduce(fb,total_fb, op=mpi.mpi.SUM,root=0)
+
+            if mpi.rank == 0:
+                mean_ft = total_ft/mpi.size
+                mean_fe = total_fe/mpi.size
+                mean_fb = total_fb/mpi.size
+                pl.dump([mean_ft,mean_fe,mean_fb],open(fname,'wb'))
+
+            mpi.barrier()
+    
+    def fg_res_mean(self,num):
+        """
+        To read the foreground residual mean
+        """
+        fname = os.path.join(self.outfolder,f"fg_res_mean_{num}.pkl")
+        return  np.array(pl.load(open(fname,'rb')))/self.Tcmb**2
+
+    def cmb_mean_mpi(self):
+        """
+        MPI Job to calculate the noise mean
+        """
+        fname = os.path.join(self.outfolder,f"cmb_mean_{mpi.size}.pkl")
+        if not os.path.isfile(fname):
+            cmb_alm = self.get_cleaned_cmb(mpi.rank)
+            tt = hp.alm2cl(cmb_alm[0])
+            ee = hp.alm2cl(cmb_alm[1])
+            bb = hp.alm2cl(cmb_alm[2])
+            
+            if mpi.rank == 0:
+                total_tt = np.zeros(tt.shape)
+                total_ee = np.zeros(ee.shape)
+                total_bb = np.zeros(bb.shape)
+            else:
+                total_tt = None
+                total_ee = None
+                total_bb = None
+            
+            mpi.com.Reduce(tt,total_tt, op=mpi.mpi.SUM,root=0)
+            mpi.com.Reduce(ee,total_ee, op=mpi.mpi.SUM,root=0)
+            mpi.com.Reduce(bb,total_bb, op=mpi.mpi.SUM,root=0)
+
+            if mpi.rank == 0:
+                mean_tt = total_tt/mpi.size
+                mean_ee = total_ee/mpi.size
+                mean_bb = total_bb/mpi.size
+                pl.dump([mean_tt,mean_ee,mean_bb],open(fname,'wb'))
+
+            mpi.barrier()
+    
+    def cmb_mean(self,num):
+        """
+        To read the noise mean
+        """
+        fname = os.path.join(self.outfolder,f"cmb_mean_{num}.pkl")
+        return  np.array(pl.load(open(fname,'rb')))/self.Tcmb**2
+
+class CMBLensed:
+    """
+    Lensing class:
+    It saves seeds, Phi Map and Lensed CMB maps
+    
+    """
+    def __init__(self,outfolder,nsim,cl_path,scal_file,pot_file,phi='v',verbose=False):
+        self.outfolder = outfolder
+        self.cl_unl = camb_clfile(os.path.join(cl_path, scal_file))
+        self.cl_pot = camb_clfile(os.path.join(cl_path, pot_file))
+        self.nside = 2048
+        self.lmax = 4096
+        self.dlmax = 1024
+        self.facres = 0
+        self.verbose = verbose
+        self.nsim = nsim
+        self.phi = phi        
+        #folder for CMB
+        self.cmb_dir = os.path.join(self.outfolder,f"CMB")
+        #folder for mass
+        self.mass_dir = os.path.join(self.outfolder,f"MASS") 
+        
+        if mpi.rank == 0:
+            os.makedirs(self.outfolder,exist_ok=True)
+            os.makedirs(self.mass_dir,exist_ok=True) 
+            os.makedirs(self.cmb_dir,exist_ok=True)
+        
+        
+        fname = os.path.join(self.outfolder,'seeds.pkl')
+        if (not os.path.isfile(fname)) and (mpi.rank == 0):
+            seeds = self.get_seeds
+            pl.dump(seeds, open(fname,'wb'), protocol=2)
+        mpi.barrier()
+        self.seeds = pl.load(open(fname,'rb'))
+
+        print(f"simulations are made with {self.phi} phi")
+        # if self.phi == 'c':
+        #     NULL = self.get_phi(0)
+        #     del NULL
+        
+        
+    @property
+    def get_seeds(self):
+        """
+        non-repeating seeds
+        """
+        seeds =[]
+        no = 0
+        while no <= self.nsim-1:
+            r = np.random.randint(11111,99999)
+            if r not in seeds:
+                seeds.append(r)
+                no+=1
+        return seeds
+    
+    def vprint(self,string):
+        if self.verbose:
+            print(string)
+                  
+    def get_phi(self,idx):
+        """
+        set a seed
+        generate phi_LM
+        Save the phi
+        """
+        if self.phi == 'v':
+            fname = os.path.join(self.mass_dir,f"phi_sims_{idx:04d}.fits")
+        elif self.phi == 'c':
+            fname = os.path.join(self.mass_dir,f"phi_sims.fits")
+        else:
+            raise ValueError(f"{self.phi} is not a valid phi")
+    
+        if os.path.isfile(fname):
+            self.vprint(f"Phi field from cache: {idx}")
+            return hp.read_alm(fname)
+        else:
+            np.random.seed(self.seeds[idx])
+            plm = hp.synalm(self.cl_pot['pp'], lmax=self.lmax + self.dlmax, new=True)
+            hp.write_alm(fname,plm)
+            self.vprint(f"Phi field cached: {idx}")
+            return plm
+        
+    def get_kappa(self,idx):
+        """
+        generate deflection field
+        sqrt(L(L+1)) * \phi_{LM}
+        """
+        der = np.sqrt(np.arange(self.lmax + 1, dtype=float) * np.arange(1, self.lmax + 2))
+        return hp.almxfl(self.get_phi(idx), der)
+    
+    def get_unlensed_alm(self,idx):
+        self.vprint(f"Synalm-ing the Unlensed CMB temp: {idx}")
+        Cls = [self.cl_unl['tt'],self.cl_unl['ee'],self.cl_unl['tt']*0,self.cl_unl['te']]
+        np.random.seed(self.seeds[idx]+1)
+        alms = hp.synalm(Cls,lmax=self.lmax + self.dlmax,new=True)
+        return alms
+    
+    def get_lensed(self,idx):
+        fname = os.path.join(self.cmb_dir,f"cmb_sims_{idx:04d}.fits")
+        if os.path.isfile(fname):
+            self.vprint(f"CMB fields from cache: {idx}")
+            return hp.read_map(fname,(0,1,2),dtype=np.float64)
+        else:
+            dlm = self.get_kappa(idx)
+            Red, Imd = hp.alm2map_spin([dlm, np.zeros_like(dlm)], self.nside, 1, hp.Alm.getlmax(dlm.size))
+            del dlm
+            tlm,elm,blm = self.get_unlensed_alm(idx)
+            del blm
+            T  = lenspyx.alm2lenmap(tlm, [Red, Imd], self.nside, 
+                                    facres=self.facres, 
+                                    verbose=False)
+            del tlm
+            Q, U  = lenspyx.alm2lenmap_spin([elm, None],[Red, Imd], 
+                                            self.nside, 2, facres=self.facres,
+                                            verbose=False)
+            del (Red, Imd, elm)
+            hp.write_map(fname,[T,Q,U],dtype=np.float64)
+            self.vprint(f"CMB field cached: {idx}")         
+            return [T,Q,U]
+        
+        
+    def run_job(self):
+        jobs = np.arange(self.nsim)
+        for i in jobs[mpi.rank::mpi.size]:
+            print(f"Lensing map-{i} in processor-{mpi.rank}")
+            NULL = self.get_lensed(i)
+            del NULL      
 
 
 
@@ -416,22 +638,47 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='ini')
     parser.add_argument('inifile', type=str, nargs=1)
     parser.add_argument('-maps', dest='maps', action='store_true', help='map making')
-    parser.add_argument('-noise', dest='noise', action='store_true', help='noise making')
-    parser.add_argument('-beam', dest='beam', action='store_true', help='noise making')
+    parser.add_argument('-noise', dest='noise', action='store_true', help='effective noise making')
+    parser.add_argument('-beam', dest='beam', action='store_true', help='effective beam making')
+    parser.add_argument('-fg', dest='fg', action='store_true', help='fg residuals making')
+    parser.add_argument('-cmb', dest='cmb', action='store_true', help='mean CMB making')
+    parser.add_argument('-lens', dest='lens', action='store_true', help='CMB Lensed')
 
     args = parser.parse_args()
+
     ini = args.inifile[0]
 
-    sim = SimExperimentFG.from_ini(ini)
+    print(ini)
+
+    if args.lens:
+        outfolder = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps_c/"
+        nsim = 100
+        cl_path = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CAMB/"
+        scal_file = "BBSims_scal_dls.dat"
+        pot_file = "BBSims_lenspotential.dat"
+        phi='c'
+        l = CMBLensed(outfolder, nsim, cl_path, scal_file, pot_file, phi,verbose=True)
+        l.run_job()
 
     if args.maps:
+        sim = SimExperimentFG.from_ini(ini)
         sim.run_job()
 
     if args.noise:
+        sim = SimExperimentFG.from_ini(ini)
         sim.noise_mean_mpi()
 
     if args.beam:
+        sim = SimExperimentFG.from_ini(ini)
         sim.beam_mean_mpi()
+    
+    if args.fg:
+        sim = SimExperimentFG.from_ini(ini)
+        sim.fg_res_mean_mpi()
+    
+    if args.cmb:
+        sim = SimExperimentFG.from_ini(ini)
+        sim.cmb_mean_mpi()
 
     mpi.barrier()
 

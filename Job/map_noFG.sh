@@ -20,4 +20,5 @@ export ini=LB_FG0.ini
 
 #mpirun -np $SLURM_NTASKS python simulation.py $ini -maps -n $SLURM_NTASKS
 #mpirun -np $SLURM_NTASKS python simulation.py $ini -noise
-mpirun -np $SLURM_NTASKS python simulation.py $ini -beam
+#mpirun -np $SLURM_NTASKS python simulation.py $ini -beam
+#mpirun -np $SLURM_NTASKS python simulation.py $ini -fg
