@@ -27,7 +27,7 @@ class Reconstruction:
     nbins: int : number of bins for the multipole binning
     """
 
-    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins):
+    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,N1_file):
         self.filt_lib = filt_lib
  
 
@@ -70,8 +70,8 @@ class Reconstruction:
         self.B = self.binner.bc
         self.Btp = self.binnertp.bc
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
-        
-    
+        self.N1 = pl.load(open(N1_file,'rb')) if os.path.isfile(N1_file) else np.zeros(self.Lmax+1)
+        self.N1[:50] = 0
     def bin_cell(self,arr):
         """
         binning function for the multipole bins
@@ -97,7 +97,8 @@ class Reconstruction:
         cl_unl = rc['cl_unl']
         nbins = rc['nbins']
         tp_nbins = rc['nbins_tp']
-        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins)
+        N1_file = rc['N1']
+        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,N1_file)
 
     @property
     def __observed_spectra__(self):
@@ -373,7 +374,7 @@ class Reconstruction:
         """
         Get the cl_phi = cl_recon - N0 - mean_field
         """
-        return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl()
+        return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl() #- (self.N1*self.response_mean()**2)
 
     def get_qcl_wR(self,idx):
         """
@@ -416,7 +417,7 @@ class Reconstruction:
             pl.dump(arr,open(fname,'wb'))
 
         arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
-        return arr/self.response_mean()**2
+        return arr#/self.response_mean()**2
 
     def get_qcl_stat(self,n=400,ret='dl',recache=False):
         fname = os.path.join(self.lib_dir,f"qcl_stat{self.nbins}_{n}_fsky_{self.fsky:.2f}_{ret}.pkl")
