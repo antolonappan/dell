@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --qos=debug
 #SBATCH --constraint=haswell
-#SBATCH --nodes=32
-#SBATCH --ntasks=500
+#SBATCH --nodes=8
+#SBATCH --ntasks=100
 #SBATCH --cpus-per-task=1
 #SBATCH -J Filt_noFG
 #SBATCH -o out/filt_noFG.out
@@ -16,6 +16,6 @@ source /global/homes/l/lonappan/.bashrc
 conda activate cmblens
 cd /global/u2/l/lonappan/workspace/LBlens
 
-export ini=LB_FG0.ini
+export ini=LB_FG0_n1.ini
 
-mpirun -np $SLURM_NTASKS python filtering.py $ini -cinv -n $SLURM_NTASKS
+mpirun -np $SLURM_NTASKS python filtering.py $ini -cinv

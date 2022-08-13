@@ -71,7 +71,7 @@ class Reconstruction:
         self.Btp = self.binnertp.bc
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
         self.N1 = pl.load(open(N1_file,'rb')) if os.path.isfile(N1_file) else np.zeros(self.Lmax+1)
-        self.N1[:50] = 0
+        #self.N1[:50] = 0
     def bin_cell(self,arr):
         """
         binning function for the multipole bins
@@ -370,19 +370,22 @@ class Reconstruction:
             Null = self.response(i)
         mpi.barrier()
     
-    def get_qcl(self,idx):
+    def get_qcl(self,idx,n1=False):
         """
         Get the cl_phi = cl_recon - N0 - mean_field
         """
-        return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl() #- (self.N1*self.response_mean()**2)
+        if n1:
+            return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl() - (self.N1*self.response_mean()**2)
+        else:
+            return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl()
 
-    def get_qcl_wR(self,idx):
+    def get_qcl_wR(self,idx,n1=False):
         """
         Get the cl_phi = (cl_recon - N0 - mean_field)/ response*82
         """
-        return self.get_qcl(idx)/self.response_mean()**2
+        return self.get_qcl(idx,n1)/self.response_mean()**2
     
-    def get_qcl_wR_stat(self,n=400,ret='dl'):
+    def get_qcl_wR_stat(self,n=400,ret='dl',n1=False):
 
 
         if ret == 'cl':
@@ -393,10 +396,16 @@ class Reconstruction:
             raise ValueError
         cl = []
         for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
-            cl.append(self.bin_cell(lfac*self.get_qcl_wR(i)))
+            cl.append(self.bin_cell(lfac*self.get_qcl_wR(i,n1)))
         
         cl = np.array(cl)
         return cl   
+
+    def plot_qcl_stat(self,n1=False):
+        stat = self.get_qcl_wR_stat(n1=n1)
+        plt.loglog(self.cl_pp*self.Lfac)
+        plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o')
+        plt.xlim(2,600)
 
     
     def MCN0(self,n=400):
@@ -485,6 +494,29 @@ class Reconstruction:
         stat = ana.statistics(ocl=1.,scl=cltp)
         stat.get_amp(fcl=cltp.mean(axis=0))
         return 1/stat.sA
+
+class N1:
+
+    def __init__(self,c_phi_ini,v_phi_ini):
+        self.c_phi_set = Reconstruction.from_ini(c_phi_ini)
+        self.v_phi_set = Reconstruction.from_ini(v_phi_ini)
+        fname = os.path.join(self.v_phi_set.lib_dir,'n1.pkl')
+        if os.path.isfile(fname):
+            self.n1 = pl.load(open(fname,'rb'))
+        else:
+            print('Calculating n1')
+            self.n1 = self.get_n1()
+            pl.dump(self.n1,open(fname,'wb'))
+
+    def get_n1(self):
+        n1 = self.c_phi_set.MCN0(self.c_phi_set.nsim) - self.v_phi_set.MCN0(self.v_phi_set.nsim)
+        return n1
+    
+    def plot_n1(self):
+        plt.loglog(self.c_phi_set.cl_pp*self.c_phi_set.Lfac)
+        plt.loglog(self.n1*self.c_phi_set.Lfac)
+        plt.loglog(self.c_phi_set.norm*self.c_phi_set.Lfac)
+
 
 
 
