@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --qos=debug
 #SBATCH --constraint=haswell
-#SBATCH --nodes=8
-#SBATCH --ntasks=100
+#SBATCH --nodes=32
+#SBATCH --ntasks=500
 #SBATCH --cpus-per-task=1
 #SBATCH -J Recon_nofg
 #SBATCH -o out/reco_nofg.out
@@ -16,7 +16,7 @@ source /global/homes/l/lonappan/.bashrc
 conda activate cmblens
 cd /global/u2/l/lonappan/workspace/LBlens
 
-export ini=LB_FG0_n1.ini
+export ini=LB_FG0.ini
 
 
 #mpirun -np $SLURM_NTASKS python quest.py $ini -qlms

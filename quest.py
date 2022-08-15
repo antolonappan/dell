@@ -29,13 +29,14 @@ class Reconstruction:
 
     def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,N1_file):
         self.filt_lib = filt_lib
+
  
 
         self.Lmax = Lmax
         self.rlmin = rlmin
         self.rlmax = rlmax
         self.lib_dir = os.path.join(self.filt_lib.sim_lib.outfolder,
-                                    f'Reconstruction_{self.rlmin}_{self.rlmax}')
+                                    f'Reconstruction_{self.rlmin}_{self.rlmax}{self.filt_lib.fname}')
         self.in_dir = os.path.join(self.lib_dir,'input')
         self.plm_dir = os.path.join(self.lib_dir,'plm')
         self.px_dir = os.path.join(self.lib_dir,'px')
@@ -50,7 +51,7 @@ class Reconstruction:
         self.mask = self.filt_lib.mask
         self.fsky = self.filt_lib.fsky
         self.nside = self.filt_lib.nside
-        self.cl_len = self.filt_lib.cl_len[:,:self.Lmax+1]
+        self.cl_len = self.filt_lib.cl_len[:,:self.rlmax+1]
         self.cl_pp = camb_clfile(cl_unl)['pp'][:self.Lmax+1]
         self.cl_unl = camb_clfile(cl_unl)
         self.beam = self.filt_lib.beam[:self.Lmax+1]
@@ -70,8 +71,9 @@ class Reconstruction:
         self.B = self.binner.bc
         self.Btp = self.binnertp.bc
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
+        N1_file = os.path.join(self.lib_dir,'n1.pkl')
         self.N1 = pl.load(open(N1_file,'rb')) if os.path.isfile(N1_file) else np.zeros(self.Lmax+1)
-        #self.N1[:50] = 0
+        
     def bin_cell(self,arr):
         """
         binning function for the multipole bins
@@ -115,13 +117,13 @@ class Reconstruction:
         if fg:
             print('fg_res included in response')
             ft,fe,fb = self.filt_lib.sim_lib.fg_res_mean(500)
-            ocl[0,:] += ft[:self.Lmax+1]*bt[:self.Lmax+1]**2
-            ocl[1,:] += fe[:self.Lmax+1]*be[:self.Lmax+1]**2
-            ocl[2,:] += fb[:self.Lmax+1]*bb[:self.Lmax+1]**2
+            ocl[0,:] += ft[:self.rlmax+1]*bt[:self.rlmax+1]**2
+            ocl[1,:] += fe[:self.rlmax+1]*be[:self.rlmax+1]**2
+            ocl[2,:] += fb[:self.rlmax+1]*bb[:self.rlmax+1]**2
 
-        ocl[0,:] += nt[:self.Lmax+1]/bt[:self.Lmax+1]**2
-        ocl[1,:] += ne[:self.Lmax+1]/be[:self.Lmax+1]**2
-        ocl[2,:] += nb[:self.Lmax+1]/bb[:self.Lmax+1]**2
+        ocl[0,:] += nt[:self.rlmax+1]/bt[:self.rlmax+1]**2
+        ocl[1,:] += ne[:self.rlmax+1]/be[:self.rlmax+1]**2
+        ocl[2,:] += nb[:self.rlmax+1]/bb[:self.rlmax+1]**2
 
         if cmb:
             print('cmb included in response')
@@ -173,9 +175,9 @@ class Reconstruction:
         else:
             E,B = self.filt_lib.cinv_EB(idx)
             glm, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
-                                       self.cl_len[1,:self.Lmax+1],
-                                       E[:self.Lmax+1,:self.Lmax+1],
-                                       B[:self.Lmax+1,:self.Lmax+1])
+                                       self.cl_len[1,:self.rlmax+1],
+                                       E[:self.rlmax+1,:self.rlmax+1],
+                                       B[:self.rlmax+1,:self.rlmax+1])
             del(clm)
             glm *= self.norm[:,None]
             pl.dump(glm,open(fname,'wb'))
@@ -194,9 +196,9 @@ class Reconstruction:
             E,_ = self.filt_lib.cinv_EB(myidx[idx])
             _,B = self.filt_lib.cinv_EB(myidx[idx+1])
             glm, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
-                                       self.cl_len[1,:self.Lmax+1],
-                                       E[:self.Lmax+1,:self.Lmax+1],
-                                       B[:self.Lmax+1,:self.Lmax+1])
+                                       self.cl_len[1,:self.rlmax+1],
+                                       E[:self.rlmax+1,:self.rlmax+1],
+                                       B[:self.rlmax+1,:self.rlmax+1])
             del clm
             glm *= self.norm[:,None]
             pl.dump(glm,open(fname,'wb'))
@@ -255,16 +257,23 @@ class Reconstruction:
         dl = np.sqrt(np.arange(self.Lmax + 1, dtype=float) * np.arange(1, self.Lmax + 2))
         return cs.utils.almxfl(self.Lmax,self.Lmax,wfphi,dl)
 
-
-
-    
+    def deflection_map(self,idx):
+        """
+        Calculate the deflection map.
+        """
+        alm = self.deflection_angle(idx)
+        return cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,alm)
     
     
     def mean_field_cl(self):
         """
         Mean field cl
         """
-        return cs.utils.alm2cl(self.Lmax,self.mean_field())/self.fsky
+        n = len(self.mf_array)
+        print(n)
+        arr =  cs.utils.alm2cl(self.Lmax,self.mean_field())/self.fsky
+        arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
+        return arr
 
     def get_phi_cl(self,idx):
         """
@@ -273,7 +282,7 @@ class Reconstruction:
         if idx in self.mf_array:
             raise ValueError("Simulation already in mean field array")
         else:
-            return cs.utils.alm2cl(self.Lmax,self.get_phi(idx))/self.fsky
+            return cs.utils.alm2cl(self.Lmax,self.get_phi(idx)-self.mean_field())/self.fsky
 
 
     def get_input_phi_sim(self,idx):
@@ -375,9 +384,9 @@ class Reconstruction:
         Get the cl_phi = cl_recon - N0 - mean_field
         """
         if n1:
-            return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl() - (self.N1*self.response_mean()**2)
+            return self.get_phi_cl(idx)  - self.MCN0() - self.N1 - (self.MCN0()+self.cl_pp)/100
         else:
-            return self.get_phi_cl(idx)  - self.MCN0() - self.mean_field_cl()
+            return self.get_phi_cl(idx)  - self.MCN0() - (self.MCN0()+self.cl_pp)/100
 
     def get_qcl_wR(self,idx,n1=False):
         """
@@ -385,7 +394,7 @@ class Reconstruction:
         """
         return self.get_qcl(idx,n1)/self.response_mean()**2
     
-    def get_qcl_wR_stat(self,n=400,ret='dl',n1=False):
+    def get_qcl_wR_stat(self,n=100,ret='dl',n1=False):
 
 
         if ret == 'cl':
@@ -425,7 +434,7 @@ class Reconstruction:
             arr = get_qcl_cross_mean(n)
             pl.dump(arr,open(fname,'wb'))
 
-        arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
+        
         return arr#/self.response_mean()**2
 
     def get_qcl_stat(self,n=400,ret='dl',recache=False):

@@ -19,13 +19,18 @@ class Filtering:
     maskpath : string : path to mask
     beam : float : beam size in arcmin
     """
-    def __init__(self,sim_lib,maskpath,beam):
+    def __init__(self,sim_lib,maskpath,beam,fullsky):
 
         self.sim_lib = sim_lib
         self.mask = hp.ud_grade(hp.read_map(maskpath),self.sim_lib.dnside)
         self.fsky = np.average(self.mask)
         self.beam = hp.gauss_beam(np.radians(beam/60),lmax=self.sim_lib.lmax)
-        self.sim_lib = sim_lib
+        self.fname = ''
+        self.fullsky = fullsky
+        if self.fullsky:
+            self.mask = np.ones(hp.nside2npix(self.sim_lib.dnside))
+            self.fname = '_fullsky'
+            self.fsky = 1.0
 
         #importing from sim lib
         self.Tcmb = self.sim_lib.Tcmb
@@ -38,7 +43,7 @@ class Filtering:
         self.Bl = np.reshape(self.beam,(1,self.lmax+1))
         self.ninv = np.reshape(np.array((self.mask,self.mask)),(2,1,hp.nside2npix(self.nside)))
 
-        self.lib_dir = os.path.join(self.sim_lib.outfolder,'Filtered')
+        self.lib_dir = os.path.join(self.sim_lib.outfolder,f"Filtered{self.fname}")
         if mpi.rank == 0:
             os.makedirs(self.lib_dir,exist_ok=True)
 
@@ -52,7 +57,8 @@ class Filtering:
         fc = config['Filtering']
         maskpath = fc['maskpath']
         beam = fc['beam']
-        return cls(sim_lib,maskpath,beam)
+        fullsky = bool(fc['fullsky'])
+        return cls(sim_lib,maskpath,beam,fullsky)
 
     def convolved_TEB(self,idx):
         """
@@ -80,8 +86,6 @@ class Filtering:
         nt,ne,nb = self.sim_lib.noise_spectra(self.sim_lib.nsim)
         return np.reshape(np.array((cli(ne[:self.lmax+1]),
                           cli(nb[:self.lmax+1]))),(2,1,self.lmax+1))
-
-
 
     def cinv_EB(self,idx,test=False):
         """
@@ -120,7 +124,6 @@ class Filtering:
         plt.figure(figsize=(8,8))
         plt.loglog(clb,label='B')
         plt.loglog(1/self.cl_len[2,:])
- 
 
     def wiener_EB(self,idx):
         """
@@ -137,9 +140,7 @@ class Filtering:
         for i in job[mpi.rank::mpi.size]:
             eb = self.cinv_EB(i)
 
-
 if __name__ == '__main__':
-
     import argparse
     parser = argparse.ArgumentParser(description='ini')
     parser.add_argument('inifile', type=str, nargs=1)
