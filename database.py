@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
 import pickle as pl
+import os 
+
 
 class surveys:
 
@@ -42,10 +44,12 @@ def noise(arr):
 
 class Surveys:
 
-    def __init__(self,database='/global/u2/l/lonappan/workspace/LBlens/surveys.pkl'):
+    def __init__(self,database='surveys.pkl'):
+        dirpath = os.path.dirname(os.path.realpath(__file__))
+        database = os.path.join(dirpath,database)
         self.database = pl.load(open(database,'rb'))
         self.tables = self.database.keys()
-        #print('database from pickle')
+        print('database from pickle')
 
     def get_table_dataframe(self,table):
         if table not in self.tables:
