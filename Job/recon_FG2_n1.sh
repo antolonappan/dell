@@ -19,7 +19,7 @@ cd /global/u2/l/lonappan/workspace/LBlens
 export ini=LB_FG2_n1.ini
 
 
-mpirun -np $SLURM_NTASKS python quest.py $ini -qlms
-#mpirun -np $SLURM_NTASKS python quest.py $ini -qlms_cross
+#mpirun -np $SLURM_NTASKS python quest.py $ini -qlms
+mpirun -np $SLURM_NTASKS python quest.py $ini -N0
 #mpirun -np $SLURM_NTASKS python quest.py $ini -qlms_input
 #mpirun -np $SLURM_NTASKS python quest.py $ini -resp

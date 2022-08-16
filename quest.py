@@ -39,13 +39,13 @@ class Reconstruction:
                                     f'Reconstruction_{self.rlmin}_{self.rlmax}{self.filt_lib.fname}')
         self.in_dir = os.path.join(self.lib_dir,'input')
         self.plm_dir = os.path.join(self.lib_dir,'plm')
-        self.px_dir = os.path.join(self.lib_dir,'px')
+        self.n0_dir = os.path.join(self.lib_dir,'N0')
         self.rp_dir = os.path.join(self.lib_dir,'response')
         if mpi.rank == 0:
             os.makedirs(self.lib_dir,exist_ok=True)
             os.makedirs(self.in_dir,exist_ok=True)
             os.makedirs(self.plm_dir,exist_ok=True)
-            os.makedirs(self.px_dir,exist_ok=True)
+            os.makedirs(self.n0_dir,exist_ok=True)
             os.makedirs(self.rp_dir,exist_ok=True)
         
         self.mask = self.filt_lib.mask
@@ -183,26 +183,34 @@ class Reconstruction:
             pl.dump(glm,open(fname,'wb'))
             return glm
 
-    def get_phi_cross(self,idx):
+    def get_N0_sim(self,idx):
         """
         Reconstruct the potential using filtered Fields with different CMB fields
         If E modes is from ith simulation then B modes is from (i+1)th simulation
         """
         myidx = np.pad(np.arange(self.nsim),(0,1),'constant',constant_values=(0,0))
-        fname = os.path.join(self.px_dir,f"phi_cross_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
+        fname = os.path.join(self.n0_dir,f"N0_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
-            E,_ = self.filt_lib.cinv_EB(myidx[idx])
-            _,B = self.filt_lib.cinv_EB(myidx[idx+1])
-            glm, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+            E1,B1 = self.filt_lib.cinv_EB(myidx[idx])
+            E2,B2 = self.filt_lib.cinv_EB(myidx[idx+1])
+            glm1, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
                                        self.cl_len[1,:self.rlmax+1],
-                                       E[:self.rlmax+1,:self.rlmax+1],
-                                       B[:self.rlmax+1,:self.rlmax+1])
-            del clm
-            glm *= self.norm[:,None]
-            pl.dump(glm,open(fname,'wb'))
-            return glm
+                                       E1[:self.rlmax+1,:self.rlmax+1],
+                                       B2[:self.rlmax+1,:self.rlmax+1])
+            glm2, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+                                        self.cl_len[1,:self.rlmax+1],
+                                        E2[:self.rlmax+1,:self.rlmax+1],
+                                        B1[:self.rlmax+1,:self.rlmax+1])
+            glm1 *= self.norm[:,None]
+            glm2 *= self.norm[:,None]
+            
+            glm = glm1 + glm2
+            n0cl = cs.utils.alm2cl(self.Lmax,glm)/(2*self.fsky)
+
+            pl.dump(n0cl,open(fname,'wb'))
+            return n0cl
     
     def job_phi(self):
         """
@@ -213,13 +221,13 @@ class Reconstruction:
             phi = self.get_phi(i)
         mpi.barrier()
     
-    def job_phi_cross(self):
+    def job_N0(self):
         """
         MPI job for the potential reconstruction with different CMB fields.
         """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
-            phi = self.get_phi_cross(i)
+            phi = self.get_N0_sim(i)
         mpi.barrier()
 
     def mean_field(self):
@@ -379,22 +387,22 @@ class Reconstruction:
             Null = self.response(i)
         mpi.barrier()
     
-    def get_qcl(self,idx,n1=False):
+    def get_qcl(self,idx,n1=True):
         """
         Get the cl_phi = cl_recon - N0 - mean_field
         """
         if n1:
-            return self.get_phi_cl(idx)  - self.MCN0() - self.N1 - (self.MCN0()+self.cl_pp)/100
+            return self.get_phi_cl(idx)  - self.MCN0() - self.N1 
         else:
-            return self.get_phi_cl(idx)  - self.MCN0() - (self.MCN0()+self.cl_pp)/100
+            return self.get_phi_cl(idx)  - self.MCN0()
 
     def get_qcl_wR(self,idx,n1=False):
         """
         Get the cl_phi = (cl_recon - N0 - mean_field)/ response*82
         """
-        return self.get_qcl(idx,n1)/self.response_mean()**2
+        return self.get_qcl(idx,n1)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
     
-    def get_qcl_wR_stat(self,n=100,ret='dl',n1=False):
+    def get_qcl_wR_stat(self,n=100,ret='dl',n1=True):
 
 
         if ret == 'cl':
@@ -405,7 +413,7 @@ class Reconstruction:
             raise ValueError
         cl = []
         for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
-            cl.append(self.bin_cell(lfac*self.get_qcl_wR(i,n1)))
+            cl.append(self.bin_cell(self.get_qcl_wR(i,n1)*self.Lfac))
         
         cl = np.array(cl)
         return cl   
@@ -418,20 +426,18 @@ class Reconstruction:
 
     
     def MCN0(self,n=400):
-        def get_qcl_cross_sim(idx):
-            return cs.utils.alm2cl(self.Lmax,self.get_phi_cross(idx))/self.fsky
 
-        def get_qcl_cross_mean(n):
+        def get_N0_mean(n):
             m = np.zeros(self.Lmax+1,dtype=np.float64)
             for i in tqdm(range(n), desc='corss spectra stat',unit='simulation'):
-                m += get_qcl_cross_sim(i)
+                m += self.get_N0_sim(i)
             return m/n
         
         fname = os.path.join(self.lib_dir,f"MCN0_{n}_fsky_{self.fsky:.2f}.pkl")
         if os.path.isfile(fname):
             arr = pl.load(open(fname,'rb'))
         else:
-            arr = get_qcl_cross_mean(n)
+            arr = get_N0_mean(n)
             pl.dump(arr,open(fname,'wb'))
 
         
@@ -458,7 +464,7 @@ class Reconstruction:
         
 
     def SNR_phi(self,n=400):
-        cl_pp = self.get_qcl_stat(n,'cl')
+        cl_pp = self.get_qcl_wR_stat(n,'cl')
         stat = ana.statistics(ocl=1.,scl=cl_pp)
         stat.get_amp(fcl=cl_pp.mean(axis=0))
         return 1/stat.sA
@@ -536,7 +542,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='ini')
     parser.add_argument('inifile', type=str, nargs=1)
     parser.add_argument('-qlms', dest='qlms', action='store_true', help='reconsturction')
-    parser.add_argument('-qlms_cross', dest='qlms_cross', action='store_true', help='reconsturction')
+    parser.add_argument('-N0', dest='N0', action='store_true', help='reconsturction')
     parser.add_argument('-qlms_input', dest='qlms_input', action='store_true', help='reconsturction')
     parser.add_argument('-resp', dest='resp', action='store_true', help='reconsturction')
 
@@ -548,8 +554,8 @@ if __name__ == "__main__":
     if args.qlms:
         r.job_phi()
     
-    if args.qlms_cross:
-        r.job_phi_cross()
+    if args.N0:
+        r.job_N0()
     
     if args.qlms_input:
         r.job_input_phi()

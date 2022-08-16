@@ -120,10 +120,11 @@ class Filtering:
         plot the cinv filtered Cls for a given idx
         """
         E,B = self.cinv_EB(idx)
+        nt,ne,nb = self.sim_lib.noise_spectra(500)
         clb = cs.utils.alm2cl(self.lmax,B)
         plt.figure(figsize=(8,8))
         plt.loglog(clb,label='B')
-        plt.loglog(1/self.cl_len[2,:])
+        plt.loglog(1/(self.cl_len[2,:]  + nb/self.beam**2))
 
     def wiener_EB(self,idx):
         """
