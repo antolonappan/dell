@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
+import pickle as pl
 
 class surveys:
 
@@ -37,3 +38,17 @@ def cl2arc(cl):
 
 def noise(arr):
     return cl2arc(1/sum(1/arc2cl(arr)))
+
+
+class Surveys:
+
+    def __init__(self,database='/global/u2/l/lonappan/workspace/LBlens/surveys.pkl'):
+        self.database = pl.load(open(database,'rb'))
+        self.tables = self.database.keys()
+        #print('database from pickle')
+
+    def get_table_dataframe(self,table):
+        if table not in self.tables:
+            raise ValueError(f"{table} not in {self.tables}")
+        return pd.DataFrame.from_dict(self.database[table])
+

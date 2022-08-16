@@ -5,7 +5,7 @@ import pysm3.units as u
 import sys
 import curvedsky as cs
 import cmb
-from database import surveys,noise
+from database import Surveys,noise
 import os
 import numpy as np
 from tqdm import tqdm
@@ -51,7 +51,7 @@ class SimExperimentFG:
         self.lmax = (3*dnside)-1
         self.fg_dir = fg_dir
         self.fg_str = fg_str
-        table = surveys().get_table_dataframe(table)
+        table = Surveys().get_table_dataframe(table)
         self.table = table[(table.frequency>Fl) & (table.frequency<Fh)]
         self.dnside = dnside
         self.Tcmb  = 2.726e6
