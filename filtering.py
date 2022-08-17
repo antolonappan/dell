@@ -46,6 +46,10 @@ class Filtering:
         self.lib_dir = os.path.join(self.sim_lib.outfolder,f"Filtered{self.fname}")
         if mpi.rank == 0:
             os.makedirs(self.lib_dir,exist_ok=True)
+        
+        print(f"FILTERING INFO: Outfolder - {self.lib_dir}")
+        print(f"FILTERING INFO: Mask path - {maskpath}")
+        print(f"FILTERING INFO: fsky - {self.fsky}")
 
     @classmethod
     def from_ini(cls,ini_file):

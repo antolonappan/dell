@@ -17,6 +17,8 @@ import lenspyx
 import toml
 
 
+
+
 class INST:
     def __init__(self,beam,frequency):
         self.Beam = beam
@@ -63,7 +65,15 @@ class SimExperimentFG:
             os.makedirs(self.mapfolder,exist_ok=True)
             os.makedirs(self.noisefolder,exist_ok=True)
             os.makedirs(self.weightfolder,exist_ok=True)
-        print(f"using {self.infolder} and {self.fg_dir} saving to {outfolder}")
+
+        print(f"SIMULATION INFO: CMB Realisation - {self.infolder}")
+        print(f"SIMULATION INFO: Foreground - {self.fg_dir}")
+        print(f"SIMULATION INFO: Foreground Model - {self.fg_str}")
+        print(f"SIMULATION INFO: Foreground included - {not self.noFG}")
+        print(f"SIMULATION INFO: Number of simulations - {self.nsim}")
+        print(f"SIMULATION INFO: Frequency range - {Fl} GHz - {Fh} GHz")
+        print(f"SIMULATION INFO: NSIDE - {self.dnside}")
+        print(f"SIMULATION INFO: Output folder - {self.outfolder}")
 
      
 
@@ -75,7 +85,6 @@ class SimExperimentFG:
         config = toml.load(ini_file)
         mc = config['Map']
         infolder = mc['infolder']
-        print(infolder)
         outfolder = mc['outfolder']
         dnside = mc['nside']
         fg_dir = mc['fg_dir']
@@ -185,22 +194,24 @@ class SimExperimentFG:
 
             noise = self.get_noise_map(idx)
             if self.noFG:
-                print("No foregrounds")
                 maps = self.convolved_cmb_vect(idx) + noise
             else:
-                print("Using foregrounds")
                 maps = self.convolved_cmb_fg_vect(idx) + noise
 
             map_alms = []
             noise_alms = []
-            for m,n,b in tqdm(zip(maps,noise,Beam),desc="Making alms",unit='Freq'):
-                alms_ = hp.map2alm(m)
-                fl = hp.gauss_beam(np.radians(b/60),lmax=self.lmax,pol=True).T
+            for i in tqdm(range(len(Beam)),desc="Making alms",unit='Freq'):
+                alms_ = hp.map2alm(maps[i])
+                n_ = hp.map2alm(noise[i])
+                fl = hp.gauss_beam(np.radians(Beam[i]/60),lmax=self.lmax,pol=True).T
                 hp.almxfl(alms_[0],cli(fl[0]),inplace=True)
                 hp.almxfl(alms_[1],cli(fl[1]),inplace=True)
                 hp.almxfl(alms_[2],cli(fl[2]),inplace=True)
+                hp.almxfl(n_[0],cli(fl[0]),inplace=True)
+                hp.almxfl(n_[1],cli(fl[1]),inplace=True)
+                hp.almxfl(n_[2],cli(fl[2]),inplace=True)
                 map_alms.append(alms_)
-                noise_alms.append(hp.map2alm(n))
+                noise_alms.append(n_)
             del (maps,noise)
 
             result = harmonic_ilc_alm(components, instrument,np.array(map_alms),bins)
@@ -217,7 +228,7 @@ class SimExperimentFG:
             del noise_alms
             hp.write_alm(mapfile,cmb_final)
             hp.write_alm(noisefile,noise_final[0])
-            print("removing tmp files")
+            print("SIMULATION INFO: removing tmp files")
             os.remove(os.path.join(self.noisefolder,f"tmp_noise_{idx:04d}.pkl"))
             os.remove(os.path.join(self.mapfolder,f"tmp_cmb_{idx:04d}.pkl"))
 
