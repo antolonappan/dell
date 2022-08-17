@@ -49,7 +49,7 @@ class Surveys:
         database = os.path.join(dirpath,database)
         self.database = pl.load(open(database,'rb'))
         self.tables = self.database.keys()
-        print('database from pickle')
+        print(f'DATABASE INFO: File - {database}')
 
     def get_table_dataframe(self,table):
         if table not in self.tables:
