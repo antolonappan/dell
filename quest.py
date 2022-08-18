@@ -1,12 +1,10 @@
-from cProfile import label
 import os
 import healpy as hp
 import mpi
 import numpy as np
 import matplotlib.pyplot as plt
 import curvedsky as cs
-import cmb
-from utils import camb_clfile,cli,hash_array
+from utils import camb_clfile,hash_array,ini_full
 import pickle as pl
 from filtering import Filtering
 import toml
@@ -27,7 +25,7 @@ class Reconstruction:
     nbins: int : number of bins for the multipole binning
     """
 
-    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,N1_file):
+    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins):
         self.filt_lib = filt_lib
 
  
@@ -54,7 +52,6 @@ class Reconstruction:
         self.cl_len = self.filt_lib.cl_len[:,:self.rlmax+1]
         self.cl_pp = camb_clfile(cl_unl)['pp'][:self.Lmax+1]
         self.cl_unl = camb_clfile(cl_unl)
-        self.beam = self.filt_lib.beam[:self.Lmax+1]
         self.Tcmb = self.filt_lib.Tcmb
         self.nsim = self.filt_lib.nsim
 
@@ -73,6 +70,11 @@ class Reconstruction:
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
         N1_file = os.path.join(self.lib_dir,'n1.pkl')
         self.N1 = pl.load(open(N1_file,'rb')) if os.path.isfile(N1_file) else np.zeros(self.Lmax+1)
+
+        print(f"QUEST INFO: Maximum L - {self.Lmax}")
+        print(f"QUEST INFO: Minimum CMB multipole - {self.rlmin}")
+        print(f"QUEST INFO: Maximum CMB multipole - {self.rlmax}")
+        print(f"QUEST INFO: N1 file found - {not np.all(self.N1 == 0)}")
         
     def bin_cell(self,arr):
         """
@@ -91,7 +93,7 @@ class Reconstruction:
         """
         Load the reconstruction object from a ini file."""
         filt_lib = Filtering.from_ini(ini_file)
-        config = toml.load(ini_file)
+        config = toml.load(ini_full(ini_file))
         rc = config['Reconstruction']
         Lmax = rc['phi_lmax']
         rlmin = rc['cmb_lmin']
@@ -99,8 +101,7 @@ class Reconstruction:
         cl_unl = rc['cl_unl']
         nbins = rc['nbins']
         tp_nbins = rc['nbins_tp']
-        N1_file = rc['N1']
-        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,N1_file)
+        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins)
 
     @property
     def __observed_spectra__(self):

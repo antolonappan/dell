@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from sqlalchemy import create_engine
 import pickle as pl
 import os 
@@ -33,20 +32,12 @@ class surveys:
         df.to_sql(table,connection)
         connection.close()
 
-def arc2cl(arc):
-    return np.radians(arc/60)**2
-def cl2arc(cl):
-    return np.rad2deg(np.sqrt(cl))*60
-
-def noise(arr):
-    return cl2arc(1/sum(1/arc2cl(arr)))
-
 
 class Surveys:
 
     def __init__(self,database='surveys.pkl'):
         dirpath = os.path.dirname(os.path.realpath(__file__))
-        database = os.path.join(dirpath,database)
+        database = os.path.join(dirpath,'Data',database)
         self.database = pl.load(open(database,'rb'))
         self.tables = self.database.keys()
         print(f'DATABASE INFO: File - {database}')

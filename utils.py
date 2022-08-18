@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from functools import wraps
 import time
@@ -53,3 +54,16 @@ def cli(cl):
     ret = np.zeros_like(cl)
     ret[np.where(cl > 0)] = 1. / cl[np.where(cl > 0)]
     return ret
+
+
+def arc2cl(arc):
+    return np.radians(arc/60)**2
+def cl2arc(cl):
+    return np.rad2deg(np.sqrt(cl))*60
+
+def noise(arr):
+    return cl2arc(1/sum(1/arc2cl(arr)))
+
+def ini_full(ini_file):
+    dirpath = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(dirpath,'ini',ini_file)

@@ -6,8 +6,8 @@ import pickle as pl
 import toml
 import healpy as hp
 import curvedsky as cs
-import cmb
-from utils import camb_clfile,cli
+from utils import cli
+from utils import ini_full
 
 from simulation import SimExperimentFG
 
@@ -19,12 +19,11 @@ class Filtering:
     maskpath : string : path to mask
     beam : float : beam size in arcmin
     """
-    def __init__(self,sim_lib,maskpath,beam,fullsky):
+    def __init__(self,sim_lib,maskpath,fullsky):
 
         self.sim_lib = sim_lib
         self.mask = hp.ud_grade(hp.read_map(maskpath),self.sim_lib.dnside)
         self.fsky = np.average(self.mask)
-        self.beam = hp.gauss_beam(np.radians(beam/60),lmax=self.sim_lib.lmax)
         self.fname = ''
         self.fullsky = fullsky
         if self.fullsky:
@@ -40,7 +39,7 @@ class Filtering:
         self.nsim = self.sim_lib.nsim
 
         #needed for filtering
-        self.Bl = np.reshape(self.beam,(1,self.lmax+1))
+        self.Bl = np.reshape(np.ones(self.lmax+1),(1,self.lmax+1))
         self.ninv = np.reshape(np.array((self.mask,self.mask)),(2,1,hp.nside2npix(self.nside)))
 
         self.lib_dir = os.path.join(self.sim_lib.outfolder,f"Filtered{self.fname}")
@@ -57,28 +56,27 @@ class Filtering:
         class method to create Filtering object from ini file
         """
         sim_lib = SimExperimentFG.from_ini(ini_file)
-        config = toml.load(ini_file)
+        config = toml.load(ini_full(ini_file))
         fc = config['Filtering']
         maskpath = fc['maskpath']
-        beam = fc['beam']
         fullsky = bool(fc['fullsky'])
-        return cls(sim_lib,maskpath,beam,fullsky)
+        return cls(sim_lib,maskpath,fullsky)
 
-    def convolved_TEB(self,idx):
-        """
-        convolve the component separated map with the beam
-        """
-        T,E,B = self.sim_lib.get_cleaned_cmb(idx)
-        hp.almxfl(T,self.beam,inplace=True)
-        hp.almxfl(E,self.beam,inplace=True)
-        hp.almxfl(B,self.beam,inplace=True)
-        return T,E,B
+    # def convolved_TEB(self,idx):
+    #     """
+    #     convolve the component separated map with the beam
+    #     """
+    #     T,E,B = self.sim_lib.get_cleaned_cmb(idx)
+    #     hp.almxfl(T,self.beam,inplace=True)
+    #     hp.almxfl(E,self.beam,inplace=True)
+    #     hp.almxfl(B,self.beam,inplace=True)
+    #     return T,E,B
 
     def TQU_to_filter(self,idx):
         """
         Change the convolved ALMs to MAPS
         """
-        T,E,B = self.convolved_TEB(idx)
+        T,E,B = self.sim_lib.get_cleaned_cmb(idx)#self.convolved_TEB(idx)
         return hp.alm2map([T,E,B],nside=self.nside)
 
     @property
@@ -110,7 +108,7 @@ class Filtering:
                 stat_file = os.path.join(self.lib_dir,'test_stat.txt')
 
             E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
-                                        np.ones_like(self.Bl), self.ninv,QU,chn=1,itns=iterations,
+                                        self.Bl, self.ninv,QU,chn=1,itns=iterations,
                                         eps=[1e-5],ro=10,inl=self.NL,stat=stat_file)
             if not test:
                 pl.dump((E,B),open(fname,'wb'))
@@ -123,12 +121,12 @@ class Filtering:
         """
         plot the cinv filtered Cls for a given idx
         """
-        E,B = self.cinv_EB(idx)
-        nt,ne,nb = self.sim_lib.noise_spectra(500)
+        _,B = self.cinv_EB(idx)
+        _,_,nb = self.sim_lib.noise_spectra(self.sim_lib.nsim)
         clb = cs.utils.alm2cl(self.lmax,B)
         plt.figure(figsize=(8,8))
         plt.loglog(clb,label='B')
-        plt.loglog(1/(self.cl_len[2,:]  + nb/self.beam**2))
+        plt.loglog(1/(self.cl_len[2,:]  + nb))
 
     def wiener_EB(self,idx):
         """

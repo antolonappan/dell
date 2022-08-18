@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --qos=debug
 #SBATCH --constraint=haswell
-#SBATCH --nodes=8
-#SBATCH --ntasks=100
+#SBATCH --nodes=32
+#SBATCH --ntasks=500
 #SBATCH --cpus-per-task=1
 #SBATCH -J Map_noFG
 #SBATCH -o out/map_noFG.out
@@ -16,9 +16,9 @@ source /global/homes/l/lonappan/.bashrc
 conda activate cmblens
 cd /global/u2/l/lonappan/workspace/LBlens
 
-export ini=LB_FG0_n1.ini
+export ini=LB_FG0.ini
 
 #mpirun -np $SLURM_NTASKS python simulation.py $ini -maps 
-#mpirun -np $SLURM_NTASKS python simulation.py $ini -noise
+mpirun -np $SLURM_NTASKS python simulation.py $ini -noise
 #mpirun -np $SLURM_NTASKS python simulation.py $ini -beam
-mpirun -np $SLURM_NTASKS python simulation.py $ini -fg
+#mpirun -np $SLURM_NTASKS python simulation.py $ini -fg

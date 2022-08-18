@@ -1,11 +1,8 @@
 from fgbuster import harmonic_ilc_alm,CMB
 import healpy as hp
-import pysm3
-import pysm3.units as u
-import sys
-import curvedsky as cs
 import cmb
-from database import Surveys,noise
+from database import Surveys
+from utils import noise,ini_full
 import os
 import numpy as np
 from tqdm import tqdm
@@ -82,7 +79,7 @@ class SimExperimentFG:
         """
         Initialize the class from an ini file
         """
-        config = toml.load(ini_file)
+        config = toml.load(ini_full(ini_file))
         mc = config['Map']
         infolder = mc['infolder']
         outfolder = mc['outfolder']
