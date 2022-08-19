@@ -19,7 +19,7 @@ class Filtering:
     maskpath : string : path to mask
     beam : float : beam size in arcmin
     """
-    def __init__(self,sim_lib,maskpath,fullsky):
+    def __init__(self,sim_lib,maskpath,fullsky,beam):
 
         self.sim_lib = sim_lib
         self.mask = hp.ud_grade(hp.read_map(maskpath),self.sim_lib.dnside)
@@ -39,7 +39,8 @@ class Filtering:
         self.nsim = self.sim_lib.nsim
 
         #needed for filtering
-        self.Bl = np.reshape(np.ones(self.lmax+1),(1,self.lmax+1))
+        self.beam = hp.gauss_beam(np.radians(beam/60),lmax = self.lmax)
+        self.Bl = np.reshape(self.beam,(1,self.lmax+1))
         self.ninv = np.reshape(np.array((self.mask,self.mask)),(2,1,hp.nside2npix(self.nside)))
 
         self.lib_dir = os.path.join(self.sim_lib.outfolder,f"Filtered{self.fname}")
@@ -49,6 +50,7 @@ class Filtering:
         print(f"FILTERING INFO: Outfolder - {self.lib_dir}")
         print(f"FILTERING INFO: Mask path - {maskpath}")
         print(f"FILTERING INFO: fsky - {self.fsky}")
+        print(f"FILTERING INFO: Beam - {beam} arcmin")
 
     @classmethod
     def from_ini(cls,ini_file):
@@ -60,23 +62,24 @@ class Filtering:
         fc = config['Filtering']
         maskpath = fc['maskpath']
         fullsky = bool(fc['fullsky'])
-        return cls(sim_lib,maskpath,fullsky)
+        beam = float(fc['beam'])
+        return cls(sim_lib,maskpath,fullsky,beam)
 
-    # def convolved_TEB(self,idx):
-    #     """
-    #     convolve the component separated map with the beam
-    #     """
-    #     T,E,B = self.sim_lib.get_cleaned_cmb(idx)
-    #     hp.almxfl(T,self.beam,inplace=True)
-    #     hp.almxfl(E,self.beam,inplace=True)
-    #     hp.almxfl(B,self.beam,inplace=True)
-    #     return T,E,B
+    def convolved_TEB(self,idx):
+        """
+        convolve the component separated map with the beam
+        """
+        T,E,B = self.sim_lib.get_cleaned_cmb(idx)
+        hp.almxfl(T,self.beam,inplace=True)
+        hp.almxfl(E,self.beam,inplace=True)
+        hp.almxfl(B,self.beam,inplace=True)
+        return T,E,B
 
     def TQU_to_filter(self,idx):
         """
         Change the convolved ALMs to MAPS
         """
-        T,E,B = self.sim_lib.get_cleaned_cmb(idx)#self.convolved_TEB(idx)
+        T,E,B = self.convolved_TEB(idx)
         return hp.alm2map([T,E,B],nside=self.nside)
 
     @property
@@ -86,8 +89,8 @@ class Filtering:
         for the filtering process
         """
         nt,ne,nb = self.sim_lib.noise_spectra(self.sim_lib.nsim)
-        return np.reshape(np.array((cli(ne[:self.lmax+1]),
-                          cli(nb[:self.lmax+1]))),(2,1,self.lmax+1))
+        return np.reshape(np.array((cli(ne[:self.lmax+1]*self.beam**2),
+                          cli(nb[:self.lmax+1]*self.beam**2))),(2,1,self.lmax+1))
 
     def cinv_EB(self,idx,test=False):
         """
@@ -133,6 +136,7 @@ class Filtering:
         Not implementer yet
         useful for delensing
         """
+        E, B = self.cinv_EB(idx)
         pass
 
     def run_job(self):

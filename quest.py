@@ -109,30 +109,14 @@ class Reconstruction:
         Calculate the expected observed spectra using ILC noise
         and effective beam
         """
-        fg = False
-        cmb = False
+
         ocl = self.cl_len.copy()
         nt,ne,nb = self.filt_lib.sim_lib.noise_spectra(self.filt_lib.sim_lib.nsim)
-        bt,be,bb = self.filt_lib.sim_lib.beam_spectra(self.filt_lib.sim_lib.nsim)
-        #(nb[:self.Lmax+1]/self.Tcmb**2)/bb[:self.Lmax+1]**2
-        if fg:
-            print('fg_res included in response')
-            ft,fe,fb = self.filt_lib.sim_lib.fg_res_mean(500)
-            ocl[0,:] += ft[:self.rlmax+1]*bt[:self.rlmax+1]**2
-            ocl[1,:] += fe[:self.rlmax+1]*be[:self.rlmax+1]**2
-            ocl[2,:] += fb[:self.rlmax+1]*bb[:self.rlmax+1]**2
 
-        ocl[0,:] += nt[:self.rlmax+1]/bt[:self.rlmax+1]**2
-        ocl[1,:] += ne[:self.rlmax+1]/be[:self.rlmax+1]**2
-        ocl[2,:] += nb[:self.rlmax+1]/bb[:self.rlmax+1]**2
+        ocl[0,:] += nt[:self.rlmax+1]
+        ocl[1,:] += ne[:self.rlmax+1]
+        ocl[2,:] += nb[:self.rlmax+1]
 
-        if cmb:
-            print('cmb included in response')
-            ctt,cee,cbb = self.filt_lib.sim_lib.cmb_mean(500)
-            ocl = np.zeros_like(ocl)
-            ocl[0,:] += ctt[:self.Lmax+1]
-            ocl[1,:] += cee[:self.Lmax+1]
-            ocl[2,:] += cbb[:self.Lmax+1]
         return ocl
 
 
