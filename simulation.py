@@ -300,6 +300,45 @@ class SimExperimentFG:
         plt.loglog(self.cl_len[2,:]*self.Tcmb**2 ,label="BB CAMB")
         plt.loglog(self.cl_len[1,:]*self.Tcmb**2 ,label="EE CAMB")
         plt.legend()
+    
+    def cl_stat(self,n=100):
+        """
+        To calculate the mean and std of the cl
+        """
+        fname = os.path.join(self.outfolder,f"cl_stat_{n}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,"rb"))
+        else:
+            clbb = np.zeros((n,self.lmax+1))
+            clee = np.zeros((n,self.lmax+1))
+            for i in tqdm(range(n),desc="Calculating Cl",unit='sim'):
+                cmb = self.get_cleaned_cmb(i)
+                clee[i,:] = hp.alm2cl(cmb[1])
+                clbb[i,:] = hp.alm2cl(cmb[2])
+            stat = (np.mean(clee,axis=0),np.std(clee,axis=0),np.mean(clbb,axis=0),np.std(clbb,axis=0))
+            pl.dump(stat,open(fname,"wb"))
+            return stat
+
+    def plot_stat(self,n=100):
+        """
+        To plot the mean and std of the cl
+        """
+        stat = self.cl_stat(n)
+        plt.figure(figsize=(8,8))
+        plt.loglog(stat[0],label="$\\frac{1}{b_\ell^2}\\left(C_\ell^{EE} + C_\ell^{FG\;res} + N_\ell\\right)$",c='r',ls='--',lw=2)
+        plt.fill_between(np.arange(self.lmax+1),stat[0]-(stat[1]),stat[0]+stat[1],color='r',alpha=0.5)
+        plt.loglog(stat[2],label="$\\frac{1}{b_\ell^2}\\left(C_\ell^{BB} + C_\ell^{FG\;res} + N_\ell\\right)$",c='b',ls='--',lw=2)
+        plt.fill_between(np.arange(self.lmax+1),stat[2]-stat[3],stat[2]+stat[3],color='b',alpha=0.5)
+        plt.loglog(self.cl_len[1,:]*self.Tcmb**2 ,c='k',ls='--',lw=2,label="EE")
+        plt.loglog(self.cl_len[2,:]*self.Tcmb**2 ,c='k',ls='-.',lw=2,label="BB")
+        plt.xlim(2,800)
+        plt.ylim(1e-7,10)
+        plt.legend(ncol=2,fontsize=20)
+        plt.xlabel(r"$\ell$",fontsize=20)
+        plt.ylabel(r"$C_\ell$ [$\mu K^2$]",fontsize=20)
+        plt.tick_params(labelsize=20)
+        plt.savefig('cl_stat.pdf',bbox_inches='tight',dpi=300)
+
 
     def noise_mean_mpi(self):
         """

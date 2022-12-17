@@ -388,27 +388,51 @@ class Reconstruction:
         return self.get_qcl(idx,n1)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
     
     def get_qcl_wR_stat(self,n=100,ret='dl',n1=True):
-
-
-        if ret == 'cl':
-            lfac = 1.0
-        elif ret == 'dl':
-            lfac = self.Lfac
+        fname = os.path.join(self.lib_dir,f"qcl_wR_stat_fsky_{self.fsky:.2f}_nbin_{self.nbins}_n_{n}_ret_{ret}_n1_{n1}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
         else:
-            raise ValueError
-        cl = []
-        for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
-            cl.append(self.bin_cell(self.get_qcl_wR(i,n1)*self.Lfac))
-        
-        cl = np.array(cl)
-        return cl   
+            if ret == 'cl':
+                lfac = 1.0
+            elif ret == 'dl':
+                lfac = self.Lfac
+            else:
+                raise ValueError
+            cl = []
+            for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
+                cl.append(self.bin_cell(self.get_qcl_wR(i,n1)*self.Lfac))
+            
+            cl = np.array(cl)
+            pl.dump(cl,open(fname,'wb'))
+            return cl   
 
-    def plot_qcl_stat(self,n1=False):
-        stat = self.get_qcl_wR_stat(n1=n1)
-        plt.loglog(self.cl_pp*self.Lfac)
-        plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o')
+    def plot_qcl_stat(self,n=100,n1=False):
+        stat = self.get_qcl_wR_stat(n=n,n1=n1)
+        plt.figure(figsize=(8,7))
+        plt.loglog(self.cl_pp*self.Lfac,label='Fiducial',c='grey',lw=2)
+        plt.loglog(self.Lfac*(self.MCN0()/self.response_mean()**2 ),label='MCN0',c='r')
+        plt.loglog(self.Lfac*self.N1,label='MCN1',c='g')
+        plt.loglog(self.Lfac*self.mean_field_cl(),label='Mean Field',c='b')
+        plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
         plt.xlim(2,600)
+        plt.legend(ncol=2, fontsize=20)
+        plt.xlabel('L',fontsize=20)
+        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+        #plt.savefig(f"clpp.pdf",bbox_inches='tight',dpi=300)
 
+    def plot_qcl_stat_low(self,n=100,n1=False):
+        stat = self.get_qcl_wR_stat(n=n,n1=n1)
+        plt.figure(figsize=(8,7))
+        plt.loglog(self.cl_pp*self.Lfac,label='Fiducial',c='grey',lw=2)
+        plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
+        plt.xlim(2,10)
+        plt.legend(ncol=2, fontsize=20)
+        plt.xlabel('L',fontsize=20)
+        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
     
     def MCN0(self,n=400):
 
@@ -470,27 +494,40 @@ class Reconstruction:
         Plm = self.get_phi(idx) - self.mean_field()
         return cs.utils.alm2cl(self.Lmax,Tlm,Plm)/self.fsky
     
-    def tXphi_stat(self,n):
-        fname = os.path.join(self.lib_dir,f"tXphi_{n}_{hash_array(self.Btp)}.pkl")
+    def tXphi_stat(self,n,ret='cl'):
+
+        if ret == 'cl':
+            lfac = np.ones(self.Lmax+1)
+            fname = os.path.join(self.lib_dir,f"tXphi_{n}_{hash_array(self.Btp)}.pkl")
+        elif ret == 'dl':
+            lfac = (self.L*(self.L+1))**2 / 2/(2*np.pi)
+            fname = os.path.join(self.lib_dir,f"tXphi_dl_{n}_{hash_array(self.Btp)}.pkl")
+
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
             cl = []
             for i in tqdm(range(n), desc='Calculating TempXphi',unit='simulation'):
-                cl.append(self.bin_cell_tp(self.get_tXphi(i)))
+                cl.append(self.bin_cell_tp(self.get_tXphi(i)*lfac))
             cl = np.array(cl)
             pl.dump(cl,open(fname,'wb'))
             return cl
 
     def plot_tXphi_stat(self,n):
-        cl = self.tXphi_stat(n)
-        plt.errorbar(self.B,cl.mean(axis=0),yerr=cl.std(axis=0))
-        plt.plot(self.L,self.cl_unl['tp'][:self.Lmax+1])
+        lfac = (self.L*(self.L+1))**2 / 2/(2*np.pi)
+        cl = self.tXphi_stat(n,ret='dl')
+        plt.figure(figsize=(8,6))
+        plt.plot(self.L,self.cl_unl['tp'][:self.Lmax+1]*lfac)
+        plt.errorbar(self.Btp,cl.mean(axis=0)/.9 ,yerr=cl.std(axis=0),fmt='o')
         plt.semilogy()
         plt.xlim(2,100)
+        plt.ylabel('$[\ell(\ell+1)]^{2} C_{\ell}^{\Theta \phi} / 2 \pi$',fontsize=20)
+        plt.xlabel('$\ell$',fontsize=20)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
 
     def SNR_tp(self,n):
-        cltp = self.tXphi_stat(n)[:,:]
+        cltp = self.tXphi_stat(n,ret='dl')[:,:]
         stat = ana.statistics(ocl=1.,scl=cltp)
         stat.get_amp(fcl=cltp.mean(axis=0))
         return 1/stat.sA
