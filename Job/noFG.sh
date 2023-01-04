@@ -20,8 +20,9 @@ export ini=LB_FG0.ini
 
 #mpirun -np $SLURM_NTASKS python simulation.py $ini -maps 
 #mpirun -np $SLURM_NTASKS python simulation.py $ini -noise
-#mpirun -np $SLURM_NTASKS python filtering.py $ini -cinv
+mpirun -np $SLURM_NTASKS python filtering.py $ini -cinv
 #mpirun -np $SLURM_NTASKS python quest.py $ini -qlms
 #mpirun -np $SLURM_NTASKS python quest.py $ini -N0
+#mpirun -np $SLURM_NTASKS python quest.py $ini -RDN0
 #mpirun -np $SLURM_NTASKS python quest.py $ini -qlms_input
-mpirun -np $SLURM_NTASKS python quest.py $ini -resp
+#mpirun -np $SLURM_NTASKS python quest.py $ini -resp

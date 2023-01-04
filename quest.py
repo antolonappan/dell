@@ -11,6 +11,7 @@ import toml
 from tqdm import tqdm
 import analysis as ana
 import binning
+import pandas as pd
 
 
 class Reconstruction:
@@ -38,12 +39,14 @@ class Reconstruction:
         self.in_dir = os.path.join(self.lib_dir,'input')
         self.plm_dir = os.path.join(self.lib_dir,'plm')
         self.n0_dir = os.path.join(self.lib_dir,'N0')
+        self.rdn0_dir = os.path.join(self.lib_dir,'RDN0')
         self.rp_dir = os.path.join(self.lib_dir,'response')
         if mpi.rank == 0:
             os.makedirs(self.lib_dir,exist_ok=True)
             os.makedirs(self.in_dir,exist_ok=True)
             os.makedirs(self.plm_dir,exist_ok=True)
             os.makedirs(self.n0_dir,exist_ok=True)
+            os.makedirs(self.rdn0_dir,exist_ok=True)
             os.makedirs(self.rp_dir,exist_ok=True)
         
         self.mask = self.filt_lib.mask
@@ -197,70 +200,65 @@ class Reconstruction:
             pl.dump(n0cl,open(fname,'wb'))
             return n0cl
 
-    def rdn0_dev(self,idx):
+    def RDN0(self,idx):
         """
         eq(21) in 1412.4760
         """
-        # create an array without the requested index and also paded with 0 and 1
-        # this is not a good method but it works for iterations less than 398
-        myidx = np.append(np.arrange(self.nsim),np.arange(2))
-        sel = np.where(myidx == idx)[0]
-        np.delete(myidx,sel)
 
-        E0,B0 = self.filt_lib.cinv_EB(idx)
+        fname = os.path.join(self.rdn0_dir,f"RDN0_{self.fsky:.2f}_{idx:04d}.pkl")
+        if os.path.isfile(fname):
+            return pl.load(open(fname,'rb'))
+        else:
+            # create an array without the requested index and also paded with 0 and 1
+            # this is not a good method but it works for iterations less than 398
+            myidx = np.append(np.arange(self.nsim),np.arange(2))
+            sel = np.where(myidx == idx)[0]
+            np.delete(myidx,sel)
 
-        mean_rdn0 = []
+            E0,B0 = self.filt_lib.cinv_EB(idx)
 
-        for i in range(100):
-            E1,B1 = self.filt_lib.cinv_EB(myidx[i])
-            E2,B2 = self.filt_lib.cinv_EB(myidx[i+1])
-            # E_0,B_1
-            glm1, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
-                                       self.cl_len[1,:self.rlmax+1],
-                                       E0[:self.rlmax+1,:self.rlmax+1],
-                                       B1[:self.rlmax+1,:self.rlmax+1])
-            # E_1,B_0
-            glm2, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
-                                        self.cl_len[1,:self.rlmax+1],
-                                        E1[:self.rlmax+1,:self.rlmax+1],
-                                        B0[:self.rlmax+1,:self.rlmax+1])
-            # E_1,B_2
-            glm3, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
-                                        self.cl_len[1,:self.rlmax+1],
-                                        E1[:self.rlmax+1,:self.rlmax+1],
-                                        B2[:self.rlmax+1,:self.rlmax+1])
-            # E_2,B_1
-            glm4, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,    
-                                        self.cl_len[1,:self.rlmax+1],
-                                        E2[:self.rlmax+1,:self.rlmax+1],
-                                        B1[:self.rlmax+1,:self.rlmax+1])
+            mean_rdn0 = []
+
+            for i in tqdm(range(100),desc=f'RDN0 for simulation {idx}', leave=True, unit='sim'):
+                E1,B1 = self.filt_lib.cinv_EB(myidx[i])
+                E2,B2 = self.filt_lib.cinv_EB(myidx[i+1])
+                # E_0,B_1
+                glm1, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+                                            self.cl_len[1,:self.rlmax+1],
+                                            E0[:self.rlmax+1,:self.rlmax+1],
+                                            B1[:self.rlmax+1,:self.rlmax+1])
+                # E_1,B_0
+                glm2, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+                                            self.cl_len[1,:self.rlmax+1],
+                                            E1[:self.rlmax+1,:self.rlmax+1],
+                                            B0[:self.rlmax+1,:self.rlmax+1])
+                # E_1,B_2
+                glm3, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+                                            self.cl_len[1,:self.rlmax+1],
+                                            E1[:self.rlmax+1,:self.rlmax+1],
+                                            B2[:self.rlmax+1,:self.rlmax+1])
+                # E_2,B_1
+                glm4, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,    
+                                            self.cl_len[1,:self.rlmax+1],
+                                            E2[:self.rlmax+1,:self.rlmax+1],
+                                            B1[:self.rlmax+1,:self.rlmax+1])
+                
+
+                glm1 *= self.norm[:,None]
+                glm2 *= self.norm[:,None]
+                glm3 *= self.norm[:,None]
+                glm4 *= self.norm[:,None]
+
+                first_four = cs.utils.alm2cl(self.Lmax, glm1 + glm2)/(self.fsky)
+                second_last = cs.utils.alm2cl(self.Lmax, glm3)/(self.fsky)
+                last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(self.fsky)
+
+                mean_rdn0.append(first_four - second_last - last)
             
+            rdn0 = np.mean(mean_rdn0,axis=0)
+            pl.dump(rdn0,open(fname,'wb'))
+            return rdn0
 
-            glm1 *= self.norm[:,None]
-            glm2 *= self.norm[:,None]
-            glm3 *= self.norm[:,None]
-            glm4 *= self.norm[:,None]
-
-            first_four = cs.utils.alm2cl(self.Lmax, glm1 + glm2)/(2*self.fsky)
-            second_last = cs.utils.alm2cl(self.Lmax, glm3)/(2*self.fsky)
-            last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(2*self.fsky)
-
-            mean_rdn0.append(first_four - second_last - last)
-        
-        return np.mean(mean_rdn0,axis=0)
-
-
-            
-
-
-
-
-
-
-
-
-
-    
     def job_phi(self):
         """
         MPI job for the potential reconstruction.
@@ -277,6 +275,15 @@ class Reconstruction:
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             phi = self.get_N0_sim(i)
+        mpi.barrier()
+    
+    def job_RDN0(self):
+        """
+        MPI job for the potential reconstruction with different CMB fields.
+        """
+        job = np.arange(mpi.size)
+        for i in job[mpi.rank::mpi.size]:
+            rdn0 = self.RDN0(i)
         mpi.barrier()
 
     def mean_field(self):
@@ -469,7 +476,19 @@ class Reconstruction:
             
             cl = np.array(cl)
             pl.dump(cl,open(fname,'wb'))
-            return cl   
+            return cl
+    def plot_bin_cor(self,n=100,ret='dl',n1=True):
+        s = self.get_qcl_wR_stat(n=n,ret=ret,n1=n1)
+        df = pd.DataFrame(s)
+        corr = df.corr()
+        plt.figure(figsize=(8,8))
+        plt.matshow(df.corr())
+        cb = plt.colorbar()
+        cb.ax.tick_params(labelsize=14)
+        plt.title('Correlation Matrix', fontsize=16)
+
+
+
 
     def plot_qcl_stat(self,n=100,n1=False):
         stat = self.get_qcl_wR_stat(n=n,n1=n1)
@@ -630,6 +649,7 @@ if __name__ == "__main__":
     parser.add_argument('inifile', type=str, nargs=1)
     parser.add_argument('-qlms', dest='qlms', action='store_true', help='reconsturction')
     parser.add_argument('-N0', dest='N0', action='store_true', help='reconsturction')
+    parser.add_argument('-RDN0', dest='RDN0', action='store_true', help='RDN0')
     parser.add_argument('-qlms_input', dest='qlms_input', action='store_true', help='reconsturction')
     parser.add_argument('-resp', dest='resp', action='store_true', help='reconsturction')
 
@@ -643,6 +663,9 @@ if __name__ == "__main__":
     
     if args.N0:
         r.job_N0()
+    
+    if args.RDN0:
+        r.job_RDN0()
     
     if args.qlms_input:
         r.job_input_phi()

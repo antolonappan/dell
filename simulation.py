@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import pickle as pl
 import lenspyx
 import toml
+import pysm3
+import pysm3.units as u
 
 
 
@@ -675,7 +677,36 @@ class CMBLensed:
         for i in jobs[mpi.rank::mpi.size]:
             print(f"Lensing map-{i} in processor-{mpi.rank}")
             NULL = self.get_lensed(i)
-            del NULL      
+            del NULL
+
+class ForeGround:
+
+    def __init__(self):
+        self.lb_table = Surveys().get_table_dataframe('LITEBIRD_V1')
+        self.fg_dir = '/global/cscratch1/sd/lonappan/S4BIRD/FG'
+        self.fg_str = "s1d1"
+        self.nside = 2048
+        os.makedirs(self.fg_dir,exist_ok=True)
+    
+    def make(self):
+        sky = pysm3.Sky(nside=self.nside, preset_strings=list(map(''.join, zip(*[iter(self.fg_str)]*2))))
+        freq = self.lb_table.frequency.values
+        for v in freq:
+            fname = os.path.join(self.fg_dir,f"{self.fg_str}_{int(v)}.fits")
+            if not os.path.isfile(fname):
+                print(f"Producing Maps at {v} GHz")
+                maps = sky.get_emission(v * u.GHz)
+                maps = maps.to(u.uK_CMB, equivalencies=u.cmb_equivalencies(v*u.GHz))
+                hp.write_map(fname, maps.value,dtype=np.float64)
+                print(f"Saved {fname}")
+            else:
+                print(f"{fname} already exists")
+                continue
+    
+
+
+
+
 
 
 
