@@ -196,6 +196,70 @@ class Reconstruction:
 
             pl.dump(n0cl,open(fname,'wb'))
             return n0cl
+
+    def rdn0_dev(self,idx):
+        """
+        eq(21) in 1412.4760
+        """
+        # create an array without the requested index and also paded with 0 and 1
+        # this is not a good method but it works for iterations less than 398
+        myidx = np.append(np.arrange(self.nsim),np.arange(2))
+        sel = np.where(myidx == idx)[0]
+        np.delete(myidx,sel)
+
+        E0,B0 = self.filt_lib.cinv_EB(idx)
+
+        mean_rdn0 = []
+
+        for i in range(100):
+            E1,B1 = self.filt_lib.cinv_EB(myidx[i])
+            E2,B2 = self.filt_lib.cinv_EB(myidx[i+1])
+            # E_0,B_1
+            glm1, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+                                       self.cl_len[1,:self.rlmax+1],
+                                       E0[:self.rlmax+1,:self.rlmax+1],
+                                       B1[:self.rlmax+1,:self.rlmax+1])
+            # E_1,B_0
+            glm2, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+                                        self.cl_len[1,:self.rlmax+1],
+                                        E1[:self.rlmax+1,:self.rlmax+1],
+                                        B0[:self.rlmax+1,:self.rlmax+1])
+            # E_1,B_2
+            glm3, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
+                                        self.cl_len[1,:self.rlmax+1],
+                                        E1[:self.rlmax+1,:self.rlmax+1],
+                                        B2[:self.rlmax+1,:self.rlmax+1])
+            # E_2,B_1
+            glm4, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,    
+                                        self.cl_len[1,:self.rlmax+1],
+                                        E2[:self.rlmax+1,:self.rlmax+1],
+                                        B1[:self.rlmax+1,:self.rlmax+1])
+            
+
+            glm1 *= self.norm[:,None]
+            glm2 *= self.norm[:,None]
+            glm3 *= self.norm[:,None]
+            glm4 *= self.norm[:,None]
+
+            first_four = cs.utils.alm2cl(self.Lmax, glm1 + glm2)/(2*self.fsky)
+            second_last = cs.utils.alm2cl(self.Lmax, glm3)/(2*self.fsky)
+            last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(2*self.fsky)
+
+            mean_rdn0.append(first_four - second_last - last)
+        
+        return np.mean(mean_rdn0,axis=0)
+
+
+            
+
+
+
+
+
+
+
+
+
     
     def job_phi(self):
         """
@@ -232,7 +296,7 @@ class Reconstruction:
             return arr
 
     def __kfac__(self):
-        nhl = self.MCN0()
+        nhl = self.MCN0()/self.response_mean()**2
         fl = self.cl_pp/(self.cl_pp+ nhl )
         fl[0] = 0
         fl[1] = 0
@@ -248,6 +312,7 @@ class Reconstruction:
         """
         wfphi = self.wf_phi(idx)
         dl = np.sqrt(np.arange(self.Lmax + 1, dtype=float) * np.arange(1, self.Lmax + 2))
+        dl[:10] = 0
         return cs.utils.almxfl(self.Lmax,self.Lmax,wfphi,dl)
 
     def deflection_map(self,idx):
