@@ -444,14 +444,19 @@ class Reconstruction:
             Null = self.response(i)
         mpi.barrier()
     
-    def get_qcl(self,idx,n1=True):
+    def get_qcl(self,idx,n1=True,rdn0=False):
         """
         Get the cl_phi = cl_recon - N0 - mean_field
         """
-        if n1:
-            return self.get_phi_cl(idx)  - self.MCN0() - self.N1 
+        cl = self.get_phi_cl(idx)
+        if n1 :
+            cl -=  self.N1 
+        if rdn0:
+            cl  -= self.RDN0(idx)
         else:
-            return self.get_phi_cl(idx)  - self.MCN0()
+            cl -= self.MCN0()
+        
+        return cl
 
     def get_qcl_wR(self,idx,n1=False):
         """
