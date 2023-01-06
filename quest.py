@@ -443,24 +443,33 @@ class Reconstruction:
         for i in job[mpi.rank::mpi.size]:
             Null = self.response(i)
         mpi.barrier()
+
+
     
-    def get_qcl(self,idx,n1=True):
+    def get_qcl(self,idx,n1=True,rdn0=False):
         """
         Get the cl_phi = cl_recon - N0 - mean_field
         """
-        if n1:
-            return self.get_phi_cl(idx)  - self.MCN0() - self.N1 
+        cl = self.get_phi_cl(idx)
+        if n1 :
+            cl -=  self.N1 
+        if rdn0:
+            cl  -= self.RDN0(idx)
         else:
-            return self.get_phi_cl(idx)  - self.MCN0()
-
-    def get_qcl_wR(self,idx,n1=False):
+            cl -= self.MCN0()
+        return cl
+  
+    def get_qcl_wR(self,idx,n1=True,rdn0=False):
         """
         Get the cl_phi = (cl_recon - N0 - mean_field)/ response*82
         """
-        return self.get_qcl(idx,n1)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
-    
-    def get_qcl_wR_stat(self,n=100,ret='dl',n1=True):
-        fname = os.path.join(self.lib_dir,f"qcl_wR_stat_fsky_{self.fsky:.2f}_nbin_{self.nbins}_n_{n}_ret_{ret}_n1_{n1}.pkl")
+        if rdn0:
+            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.RDN0(idx)/self.response_mean()**2)+self.cl_pp)/100
+        else:
+            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
+
+    def get_qcl_wR_stat(self,n=400,ret='dl',n1=True,rdn0=False):
+        fname = os.path.join(self.lib_dir,f"qclSTAT_fsky_{self.fsky:.2f}_nbin_{self.nbins}_n_{n}_ret_{ret}_n1_{n1}_rd_{rdn0}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -472,13 +481,13 @@ class Reconstruction:
                 raise ValueError
             cl = []
             for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
-                cl.append(self.bin_cell(self.get_qcl_wR(i,n1)*self.Lfac))
+                cl.append(self.bin_cell(self.get_qcl_wR(i,n1,rdn0)*self.Lfac))
             
             cl = np.array(cl)
             pl.dump(cl,open(fname,'wb'))
             return cl
-    def plot_bin_cor(self,n=100,ret='dl',n1=True):
-        s = self.get_qcl_wR_stat(n=n,ret=ret,n1=n1)
+    def plot_bin_cor(self,n=400,ret='dl',n1=True,rdn0=False):
+        s = self.get_qcl_wR_stat(n=n,ret=ret,n1=n1,rdn0=rdn0)
         df = pd.DataFrame(s)
         corr = df.corr()
         plt.figure(figsize=(8,8))
@@ -490,8 +499,8 @@ class Reconstruction:
 
 
 
-    def plot_qcl_stat(self,n=100,n1=False):
-        stat = self.get_qcl_wR_stat(n=n,n1=n1)
+    def plot_qcl_stat(self,n=400,n1=True,rdn0=False):
+        stat = self.get_qcl_wR_stat(n=n,n1=n1,rdn0=rdn0)
         plt.figure(figsize=(8,7))
         plt.loglog(self.cl_pp*self.Lfac,label='Fiducial',c='grey',lw=2)
         plt.loglog(self.Lfac*(self.MCN0()/self.response_mean()**2 ),label='MCN0',c='r')
@@ -556,8 +565,8 @@ class Reconstruction:
             return cl
         
 
-    def SNR_phi(self,n=400):
-        cl_pp = self.get_qcl_wR_stat(n,'cl')
+    def SNR_phi(self,n=400,n1=True,rdn0=False):
+        cl_pp = self.get_qcl_wR_stat(n,'cl',n1=n1,rdn0=rdn0)
         stat = ana.statistics(ocl=1.,scl=cl_pp)
         stat.get_amp(fcl=cl_pp.mean(axis=0))
         return 1/stat.sA
