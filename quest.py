@@ -254,7 +254,7 @@ class Reconstruction:
                 second_last = cs.utils.alm2cl(self.Lmax, glm3)/(self.fsky)
                 last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(self.fsky)
 
-                mean_rdn0.append(first_four/2) #- second_last - last)
+                mean_rdn0.append(first_four - second_last - last)
             
             rdn0 = np.mean(mean_rdn0,axis=0)
             pl.dump(rdn0,open(fname,'wb'))
