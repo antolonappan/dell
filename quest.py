@@ -12,6 +12,7 @@ from tqdm import tqdm
 import analysis as ana
 import binning
 import pandas as pd
+import seaborn as sns
 
 
 class Reconstruction:
@@ -39,7 +40,7 @@ class Reconstruction:
         self.in_dir = os.path.join(self.lib_dir,'input')
         self.plm_dir = os.path.join(self.lib_dir,'plm')
         self.n0_dir = os.path.join(self.lib_dir,'N0')
-        self.rdn0_dir = os.path.join(self.lib_dir,'RDN0')
+        self.rdn0_dir = os.path.join(self.lib_dir,'RDN0t1')
         self.rp_dir = os.path.join(self.lib_dir,'response')
         if mpi.rank == 0:
             os.makedirs(self.lib_dir,exist_ok=True)
@@ -213,7 +214,7 @@ class Reconstruction:
             # this is not a good method but it works for iterations less than 398
             myidx = np.append(np.arange(self.nsim),np.arange(2))
             sel = np.where(myidx == idx)[0]
-            np.delete(myidx,sel)
+            myidx = np.delete(myidx,sel)
 
             E0,B0 = self.filt_lib.cinv_EB(idx)
 
@@ -253,7 +254,7 @@ class Reconstruction:
                 second_last = cs.utils.alm2cl(self.Lmax, glm3)/(self.fsky)
                 last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(self.fsky)
 
-                mean_rdn0.append(first_four - second_last - last)
+                mean_rdn0.append(first_four/2) #- second_last - last)
             
             rdn0 = np.mean(mean_rdn0,axis=0)
             pl.dump(rdn0,open(fname,'wb'))
@@ -464,9 +465,9 @@ class Reconstruction:
         Get the cl_phi = (cl_recon - N0 - mean_field)/ response*82
         """
         if rdn0:
-            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.RDN0(idx)/self.response_mean()**2)+self.cl_pp)/100
+            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   #- ((self.RDN0(idx)/self.response_mean()**2)+self.cl_pp)/100
         else:
-            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
+            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   #- ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
 
     def get_qcl_wR_stat(self,n=400,ret='dl',n1=True,rdn0=False):
         fname = os.path.join(self.lib_dir,f"qclSTAT_fsky_{self.fsky:.2f}_nbin_{self.nbins}_n_{n}_ret_{ret}_n1_{n1}_rd_{rdn0}.pkl")
@@ -486,15 +487,12 @@ class Reconstruction:
             cl = np.array(cl)
             pl.dump(cl,open(fname,'wb'))
             return cl
-    def plot_bin_cor(self,n=400,ret='dl',n1=True,rdn0=False):
+    def plot_bin_cor(self,n=400,ret='cl',n1=True,rdn0=False):
         s = self.get_qcl_wR_stat(n=n,ret=ret,n1=n1,rdn0=rdn0)
         df = pd.DataFrame(s)
         corr = df.corr()
-        plt.figure(figsize=(8,8))
-        plt.matshow(df.corr())
-        cb = plt.colorbar()
-        cb.ax.tick_params(labelsize=14)
-        plt.title('Correlation Matrix', fontsize=16)
+        plt.figure(figsize=(10,10))
+        ax = sns.heatmap(corr,cmap='coolwarm')
 
 
 
