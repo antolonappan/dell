@@ -490,12 +490,10 @@ class Reconstruction:
     def plot_bin_cor(self,n=400,ret='cl',n1=True,rdn0=False):
         s = self.get_qcl_wR_stat(n=n,ret=ret,n1=n1,rdn0=rdn0)
         df = pd.DataFrame(s)
+        df.columns = self.B.astype(np.int)
         corr = df.corr()
         plt.figure(figsize=(10,10))
         ax = sns.heatmap(corr)
-
-
-
 
     def plot_qcl_stat(self,n=400,n1=True,rdn0=False):
         stat = self.get_qcl_wR_stat(n=n,n1=n1,rdn0=rdn0)
