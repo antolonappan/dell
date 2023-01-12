@@ -40,7 +40,7 @@ class Reconstruction:
         self.in_dir = os.path.join(self.lib_dir,'input')
         self.plm_dir = os.path.join(self.lib_dir,'plm')
         self.n0_dir = os.path.join(self.lib_dir,'N0')
-        self.rdn0_dir = os.path.join(self.lib_dir,'RDN0t1')
+        self.rdn0_dir = os.path.join(self.lib_dir,'RDN0')
         self.rp_dir = os.path.join(self.lib_dir,'response')
         if mpi.rank == 0:
             os.makedirs(self.lib_dir,exist_ok=True)
@@ -465,9 +465,9 @@ class Reconstruction:
         Get the cl_phi = (cl_recon - N0 - mean_field)/ response*82
         """
         if rdn0:
-            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   #- ((self.RDN0(idx)/self.response_mean()**2)+self.cl_pp)/100
+            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.RDN0(idx)/self.response_mean()**2)+self.cl_pp)/100
         else:
-            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   #- ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
+            return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
 
     def get_qcl_wR_stat(self,n=400,ret='dl',n1=True,rdn0=False):
         fname = os.path.join(self.lib_dir,f"qclSTAT_fsky_{self.fsky:.2f}_nbin_{self.nbins}_n_{n}_ret_{ret}_n1_{n1}_rd_{rdn0}.pkl")
@@ -492,7 +492,7 @@ class Reconstruction:
         df = pd.DataFrame(s)
         corr = df.corr()
         plt.figure(figsize=(10,10))
-        ax = sns.heatmap(corr,cmap='coolwarm')
+        ax = sns.heatmap(corr)
 
 
 
@@ -505,7 +505,7 @@ class Reconstruction:
         plt.loglog(self.Lfac*self.N1,label='MCN1',c='g')
         plt.loglog(self.Lfac*self.mean_field_cl(),label='Mean Field',c='b')
         plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
-        plt.xlim(2,600)
+        plt.xlim(2,1000)
         plt.legend(ncol=2, fontsize=20)
         plt.xlabel('L',fontsize=20)
         plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
@@ -513,7 +513,7 @@ class Reconstruction:
         plt.yticks(fontsize=20)
         #plt.savefig(f"clpp.pdf",bbox_inches='tight',dpi=300)
 
-    def plot_qcl_stat_low(self,n=100,n1=False):
+    def plot_qcl_stat_low(self,n=400,n1=True):
         stat = self.get_qcl_wR_stat(n=n,n1=n1)
         plt.figure(figsize=(8,7))
         plt.loglog(self.cl_pp*self.Lfac,label='Fiducial',c='grey',lw=2)

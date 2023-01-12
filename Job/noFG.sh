@@ -7,7 +7,7 @@
 #SBATCH -J NoFG
 #SBATCH -o out/nofg.out
 #SBATCH -e out/nofg.err
-#SBATCH --time=02:30:00
+#SBATCH --time=02:00:00
 #SBATCH --mail-type=begin,end,fail
 #SBATCH --mail-user=anto.lonappan@sissa.it
 
