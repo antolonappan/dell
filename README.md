@@ -5,4 +5,21 @@
 [![GitHub pull-requests](https://img.shields.io/github/issues-pr/antolonappan/dell.svg)](https://GitHub.com/antolonappan/dell/pull/)
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-1f425f.svg)](https://www.python.org/)
 [![Visual Studio](https://badgen.net/badge/icon/VScode?icon=visualstudio&label)](https://code.visualstudio.com)
+[![Gitter](https://badges.gitter.im/LBdell/community.svg)](https://gitter.im/LBdell/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
+## Contains
+
+:arrow_right: LiteBIRD CMB simulations <br />
+:arrow_right: Foreground simulations <br />
+:arrow_right: Component Separation <br />
+:arrow_right: C inverse filtering <br />
+:arrow_right: Reconstruction of Lensing deflection field <br />
+:arrow_right: Monte Carlo N0 bias <br />
+:arrow_right: Monte Carlo N1 bias <br />
+:arrow_right: Reailazation Dependant N0 bias <br />
+:arrow_right: Spectra Statistics <br />
+
+
+## Dependencies
+[![cmblensplus](https://img.shields.io/badge/-cmblensplus-blue)](https://github.com/toshiyan/cmblensplus)
+[![fgbuster](https://img.shields.io/badge/-FGBuster-green)](https://github.com/fgbuster/fgbuster)
