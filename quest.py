@@ -503,7 +503,7 @@ class Reconstruction:
         plt.loglog(self.Lfac*self.N1,label='MCN1',c='g')
         plt.loglog(self.Lfac*self.mean_field_cl(),label='Mean Field',c='b')
         plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
-        plt.xlim(2,1000)
+        plt.xlim(2,600)
         plt.legend(ncol=2, fontsize=20)
         plt.xlabel('L',fontsize=20)
         plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)

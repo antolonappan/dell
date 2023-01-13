@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import healpy as hp
+import os
 
 class Stat:
 
@@ -64,5 +65,14 @@ class Stat:
         hp.mollview(output,norm='hist',min=-.0005,max=.001,title='$\\sqrt{L(L+1)}\phi^{WF,rec}_{LM}$',sub=(1,2,2),notext=True)
         if save:
             plt.savefig('def_comp.pdf', bbox_inches='tight',dpi=300)
+
+    def SNR_impact(self):
+        rec_nofg = self.rec_nofg
+        rec_fg = self.rec_fg
+        SNR_nofg = rec_nofg.SNR_phi(rdn0=True)
+        SNR_fg = rec_fg.SNR_phi(rdn0=True)
+        print(f"SNR NOFG: {SNR_nofg:.2f}")
+        print(f"SNR FG: {SNR_fg:.2f}")
+        print(f"SNR decreased: {(1-SNR_fg/SNR_nofg)*100:.2f} %")
 
 
