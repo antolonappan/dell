@@ -1,4 +1,4 @@
-# DELL 
+# DELL [![litebird](https://img.shields.io/static/v1?label=submodule%20of&message=LiteBIRD-Lensing&color=blue)](https://github.com/litebird/LiteBIRD-lensing)
 
 ![example workflow](https://github.com/antolonappan/dell/actions/workflows/update.yml/badge.svg)
 [![wakatime](https://wakatime.com/badge/github/antolonappan/dell.svg)](https://wakatime.com/badge/github/antolonappan/dell)
