@@ -19,7 +19,7 @@ class Filtering:
     maskpath : string : path to mask
     beam : float : beam size in arcmin
     """
-    def __init__(self,sim_lib,maskpath,fullsky,beam):
+    def __init__(self,sim_lib,maskpath,fullsky,beam,verbose=False):
 
         self.sim_lib = sim_lib
         self.mask = hp.ud_grade(hp.read_map(maskpath),self.sim_lib.dnside)
@@ -46,11 +46,17 @@ class Filtering:
         self.lib_dir = os.path.join(self.sim_lib.outfolder,f"Filtered{self.fname}")
         if mpi.rank == 0:
             os.makedirs(self.lib_dir,exist_ok=True)
-        
-        print(f"FILTERING INFO: Outfolder - {self.lib_dir}")
-        print(f"FILTERING INFO: Mask path - {maskpath}")
-        print(f"FILTERING INFO: fsky - {self.fsky}")
-        print(f"FILTERING INFO: Beam - {beam} arcmin")
+
+        self.verbose = verbose
+        self.vprint(f"FILTERING INFO: Outfolder - {self.lib_dir}")
+        self.vprint(f"FILTERING INFO: Mask path - {maskpath}")
+        self.vprint(f"FILTERING INFO: fsky - {self.fsky}")
+        self.vprint(f"FILTERING INFO: Beam - {beam} arcmin")
+        print(f"FILTERING INFO: Loaded")
+    
+    def vprint(self,txt):
+        if self.verbose:
+            print(txt)
 
     @classmethod
     def from_ini(cls,ini_file):
@@ -106,7 +112,7 @@ class Filtering:
             iterations = [1000]
             stat_file = '' 
             if test:
-                print(f"Cinv filtering is testing {idx}")
+                self.vprint(f"Cinv filtering is testing {idx}")
                 iterations = [10]
                 stat_file = os.path.join(self.lib_dir,'test_stat.txt')
 

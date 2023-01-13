@@ -27,11 +27,8 @@ class Reconstruction:
     nbins: int : number of bins for the multipole binning
     """
 
-    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins):
+    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose=False):
         self.filt_lib = filt_lib
-
- 
-
         self.Lmax = Lmax
         self.rlmin = rlmin
         self.rlmax = rlmax
@@ -74,11 +71,17 @@ class Reconstruction:
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
         N1_file = os.path.join(self.lib_dir,'n1.pkl')
         self.N1 = pl.load(open(N1_file,'rb')) if os.path.isfile(N1_file) else np.zeros(self.Lmax+1)
+        self.verbose = verbose
 
-        print(f"QUEST INFO: Maximum L - {self.Lmax}")
-        print(f"QUEST INFO: Minimum CMB multipole - {self.rlmin}")
-        print(f"QUEST INFO: Maximum CMB multipole - {self.rlmax}")
-        print(f"QUEST INFO: N1 file found - {not np.all(self.N1 == 0)}")
+        self.vprint(f"QUEST INFO: Maximum L - {self.Lmax}")
+        self.vprint(f"QUEST INFO: Minimum CMB multipole - {self.rlmin}")
+        self.vprint(f"QUEST INFO: Maximum CMB multipole - {self.rlmax}")
+        self.vprint(f"QUEST INFO: N1 file found - {not np.all(self.N1 == 0)}")
+        print(f"QUEST INFO: Loaded")
+    
+    def vprint(self,txt):
+        if self.verbose:
+            print(txt)
         
     def bin_cell(self,arr):
         """
@@ -93,7 +96,7 @@ class Reconstruction:
         return binning.binning(arr,self.binnertp)
 
     @classmethod
-    def from_ini(cls,ini_file):
+    def from_ini(cls,ini_file,verbose=False):
         """
         Load the reconstruction object from a ini file."""
         filt_lib = Filtering.from_ini(ini_file)
@@ -105,7 +108,7 @@ class Reconstruction:
         cl_unl = rc['cl_unl']
         nbins = rc['nbins']
         tp_nbins = rc['nbins_tp']
-        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins)
+        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose)
 
     @property
     def __observed_spectra__(self):
@@ -336,7 +339,6 @@ class Reconstruction:
         Mean field cl
         """
         n = len(self.mf_array)
-        print(n)
         arr =  cs.utils.alm2cl(self.Lmax,self.mean_field())/self.fsky
         arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
         return arr
@@ -356,11 +358,11 @@ class Reconstruction:
         Get the masked input potential alms
         """
         if self.nsim <200:
-            print("input phi is constant")
+            self.vprint("input phi is constant")
             dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps_c/MASS"
             fname = os.path.join(dir_,f"phi_sims.fits")
         else:
-            print("input phi is from variying")
+            self.vprint("input phi is from variying")
             dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
             fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
         fnamet = os.path.join(self.in_dir,f"phi_sims_{idx:04d}.pkl")
@@ -630,7 +632,7 @@ class N1:
         if os.path.isfile(fname):
             self.n1 = pl.load(open(fname,'rb'))
         else:
-            print('Calculating n1')
+            self.vprint('Calculating n1')
             self.n1 = self.get_n1()
             pl.dump(self.n1,open(fname,'wb'))
 
