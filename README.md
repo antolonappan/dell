@@ -22,4 +22,6 @@
 
 ## Dependencies
 [![cmblensplus](https://img.shields.io/badge/-cmblensplus-blue)](https://github.com/toshiyan/cmblensplus)
-[![fgbuster](https://img.shields.io/badge/-FGBuster-green)](https://github.com/fgbuster/fgbuster)
+[![fgbuster](https://img.shields.io/badge/-FGBuster-brightgreen)](https://github.com/fgbuster/fgbuster)
+[![pysm3](https://img.shields.io/badge/-pysm3-yellow)](https://github.com/galsci/pysm)
+[![healpy](https://img.shields.io/badge/-healpy-orange)](https://github.com/healpy/healpy)
