@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import healpy as hp
 import os
+import seaborn as sns
 
 class Stat:
 
@@ -74,5 +75,19 @@ class Stat:
         print(f"SNR NOFG: {SNR_nofg:.2f}")
         print(f"SNR FG: {SNR_fg:.2f}")
         print(f"SNR decreased: {(1-SNR_fg/SNR_nofg)*100:.2f} %")
+    
+    def plot_bin_corr_comp(self,fg=False):
+        """
+        TODO
+        """
+        if fg:
+            rec = self.rec_fg
+        else:
+            rec = self.rec_nofg
+        fig, (ax1,ax2) = plt.subplots(1, 2)
+        ax1 = sns.heatmap(rec.bin_corr())
+        ax2 = sns.heatmap(rec.bin_corr(rdn0=True))
+        ax1.set_title('MCN0')
+        ax2.set_title('RDN0')
 
 

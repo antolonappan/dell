@@ -35,12 +35,14 @@ class surveys:
 
 class Surveys:
 
-    def __init__(self,database='surveys.pkl'):
+    def __init__(self,database='surveys.pkl',verbose=False):
         dirpath = os.path.dirname(os.path.realpath(__file__))
         database = os.path.join(dirpath,'Data',database)
         self.database = pl.load(open(database,'rb'))
         self.tables = self.database.keys()
-        print(f'DATABASE INFO: File - {database}')
+        if verbose:
+            print(f'DATABASE INFO: File - {database}')
+        print("DATABASE: loaded")
 
     def get_table_dataframe(self,table):
         if table not in self.tables:

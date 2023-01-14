@@ -52,14 +52,14 @@ class Filtering:
         self.vprint(f"FILTERING INFO: Mask path - {maskpath}")
         self.vprint(f"FILTERING INFO: fsky - {self.fsky}")
         self.vprint(f"FILTERING INFO: Beam - {beam} arcmin")
-        print(f"FILTERING INFO: Loaded")
+        print(f"FILTERING object with {'out' if self.sim_lib.noFG else ''} FG: Loaded")
     
     def vprint(self,txt):
         if self.verbose:
             print(txt)
 
     @classmethod
-    def from_ini(cls,ini_file):
+    def from_ini(cls,ini_file,verbose=False):
         """
         class method to create Filtering object from ini file
         """
@@ -69,7 +69,7 @@ class Filtering:
         maskpath = fc['maskpath']
         fullsky = bool(fc['fullsky'])
         beam = float(fc['beam'])
-        return cls(sim_lib,maskpath,fullsky,beam)
+        return cls(sim_lib,maskpath,fullsky,beam,verbose)
 
     def convolved_TEB(self,idx):
         """

@@ -77,7 +77,7 @@ class Reconstruction:
         self.vprint(f"QUEST INFO: Minimum CMB multipole - {self.rlmin}")
         self.vprint(f"QUEST INFO: Maximum CMB multipole - {self.rlmax}")
         self.vprint(f"QUEST INFO: N1 file found - {not np.all(self.N1 == 0)}")
-        print(f"QUEST INFO: Loaded")
+        print(f"QUEST object with {'out' if self.filt_lib.sim_lib.noFG else ''} FG: Loaded")
     
     def vprint(self,txt):
         if self.verbose:
@@ -489,11 +489,16 @@ class Reconstruction:
             cl = np.array(cl)
             pl.dump(cl,open(fname,'wb'))
             return cl
-    def plot_bin_cor(self,n=400,ret='cl',n1=True,rdn0=False):
+            
+    def bin_corr(self,n=400,ret='cl',n1=True,rdn0=False):
         s = self.get_qcl_wR_stat(n=n,ret=ret,n1=n1,rdn0=rdn0)
         df = pd.DataFrame(s)
         df.columns = self.B.astype(np.int)
         corr = df.corr()
+        return corr
+
+    def plot_bin_cor(self,n=400,ret='cl',n1=True,rdn0=False):
+        corr = self.bin_corr(n=n,ret=ret,n1=n1,rdn0=rdn0)
         plt.figure(figsize=(10,10))
         ax = sns.heatmap(corr)
 

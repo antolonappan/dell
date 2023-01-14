@@ -41,7 +41,7 @@ class SimExperimentFG:
     noFG: bool : if True, no foreground is used
     """
 
-    def __init__(self,infolder,outfolder,dnside,fg_dir,fg_str,table,len_cl_file,nsim,Fl=0,Fh=500,noFG=False):
+    def __init__(self,infolder,outfolder,dnside,fg_dir,fg_str,table,len_cl_file,nsim,Fl=0,Fh=500,noFG=False,verbose=False):
 
         self.infolder = infolder
         outfolder = os.path.join(outfolder,f"{fg_str}") if not noFG else os.path.join(outfolder,f"noFG")
@@ -64,20 +64,27 @@ class SimExperimentFG:
             os.makedirs(self.mapfolder,exist_ok=True)
             os.makedirs(self.noisefolder,exist_ok=True)
             os.makedirs(self.weightfolder,exist_ok=True)
+        
+        self.verbose = verbose
 
-        print(f"SIMULATION INFO: CMB Realisation - {self.infolder}")
-        print(f"SIMULATION INFO: Foreground - {self.fg_dir}")
-        print(f"SIMULATION INFO: Foreground Model - {self.fg_str}")
-        print(f"SIMULATION INFO: Foreground included - {not self.noFG}")
-        print(f"SIMULATION INFO: Number of simulations - {self.nsim}")
-        print(f"SIMULATION INFO: Frequency range - {Fl} GHz - {Fh} GHz")
-        print(f"SIMULATION INFO: NSIDE - {self.dnside}")
-        print(f"SIMULATION INFO: Output folder - {self.outfolder}")
+        self.vprint(f"SIMULATION INFO: CMB Realisation - {self.infolder}")
+        self.vprint(f"SIMULATION INFO: Foreground - {self.fg_dir}")
+        self.vprint(f"SIMULATION INFO: Foreground Model - {self.fg_str}")
+        self.vprint(f"SIMULATION INFO: Foreground included - {not self.noFG}")
+        self.vprint(f"SIMULATION INFO: Number of simulations - {self.nsim}")
+        self.vprint(f"SIMULATION INFO: Frequency range - {Fl} GHz - {Fh} GHz")
+        self.vprint(f"SIMULATION INFO: NSIDE - {self.dnside}")
+        self.vprint(f"SIMULATION INFO: Output folder - {self.outfolder}")
+        print(f"SIMUALATION object with {'out' if self.noFG else ''} FG: Loaded")
+    
+    def vprint(self,txt):
+        if self.verbose:
+            print(txt)
 
      
 
     @classmethod
-    def from_ini(cls,ini_file):
+    def from_ini(cls,ini_file,verbose=False):
         """
         Initialize the class from an ini file
         """
@@ -94,7 +101,7 @@ class SimExperimentFG:
         Fh = float(mc['Fh'])
         noFG = bool(mc['noFG'])
         nsim = int(mc['nsim'])
-        return cls(infolder,outfolder,dnside,fg_dir,fg_str,table,len_cl_file,nsim,Fl,Fh,noFG)
+        return cls(infolder,outfolder,dnside,fg_dir,fg_str,table,len_cl_file,nsim,Fl,Fh,noFG,verbose)
 
 
     def get_inv_w_noise(self):
@@ -227,7 +234,7 @@ class SimExperimentFG:
             del noise_alms
             hp.write_alm(mapfile,cmb_final)
             hp.write_alm(noisefile,noise_final[0])
-            print("SIMULATION INFO: removing tmp files")
+            self.vprint("SIMULATION INFO: removing tmp files")
             os.remove(os.path.join(self.noisefolder,f"tmp_noise_{idx:04d}.pkl"))
             os.remove(os.path.join(self.mapfolder,f"tmp_cmb_{idx:04d}.pkl"))
 
@@ -398,7 +405,7 @@ class SimExperimentFG:
         """
         To get the Effective beam for the simulation using ILC weights
         """
-        print("Getting beam for simulation")
+        self.vprint("Getting beam for simulation")
         W = self.get_weights_cmb(idx)
         Wt = W[0]
         We = W[1]
@@ -586,7 +593,7 @@ class CMBLensed:
         mpi.barrier()
         self.seeds = pl.load(open(fname,'rb'))
 
-        print(f"simulations are made with {self.phi} phi")
+        self.vprint(f"simulations are made with {self.phi} phi")
         # if self.phi == 'c':
         #     NULL = self.get_phi(0)
         #     del NULL
