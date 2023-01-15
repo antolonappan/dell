@@ -214,8 +214,6 @@ class Reconstruction:
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
-            # create an array without the requested index and also paded with 0 and 1
-            # this is not a good method but it works for iterations less than 398
             myidx = np.append(np.arange(self.nsim),np.arange(2))
             sel = np.where(myidx == idx)[0]
             myidx = np.delete(myidx,sel)
@@ -547,7 +545,7 @@ class Reconstruction:
             pl.dump(arr,open(fname,'wb'))
 
         
-        return arr#/self.response_mean()**2
+        return arr
 
     def get_qcl_stat(self,n=400,ret='dl',recache=False):
         fname = os.path.join(self.lib_dir,f"qcl_stat{self.nbins}_{n}_fsky_{self.fsky:.2f}_{ret}.pkl")
