@@ -14,7 +14,6 @@ import binning
 import pandas as pd
 import seaborn as sns
 
-
 class Reconstruction:
     """
     Class to reconstruct the lensing potentials from the filtered CMB fields.
@@ -25,6 +24,8 @@ class Reconstruction:
     rlmax: int : maximum multipole of CMB for the reconstruction
     cl_unl: str : path to the unlensed CMB power spectrum
     nbins: int : number of bins for the multipole binning
+    tp_nbins: int : number of bins for the multipole binning for the ISW
+    verbose: bool : print the information of the reconstruction
     """
 
     def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose=False):
@@ -78,27 +79,12 @@ class Reconstruction:
         self.vprint(f"QUEST INFO: Maximum CMB multipole - {self.rlmax}")
         self.vprint(f"QUEST INFO: N1 file found - {not np.all(self.N1 == 0)}")
         print(f"QUEST object with {'out' if self.filt_lib.sim_lib.noFG else ''} FG: Loaded")
-    
-    def vprint(self,txt):
-        if self.verbose:
-            print(txt)
-        
-    def bin_cell(self,arr):
-        """
-        binning function for the multipole bins
-        """
-        return binning.binning(arr,self.binner)
-    
-    def bin_cell_tp(self,arr):
-        """
-        binning function for the multipole bins
-        """
-        return binning.binning(arr,self.binnertp)
 
     @classmethod
     def from_ini(cls,ini_file,verbose=False):
         """
-        Load the reconstruction object from a ini file."""
+        Load the reconstruction object from a ini file.
+        """
         filt_lib = Filtering.from_ini(ini_file)
         config = toml.load(ini_full(ini_file))
         rc = config['Reconstruction']
@@ -109,6 +95,42 @@ class Reconstruction:
         nbins = rc['nbins']
         tp_nbins = rc['nbins_tp']
         return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose)
+    
+    def vprint(self,txt):
+        """
+        print only if verbose is true
+
+        txt: str : text to print
+        """
+        if self.verbose:
+            print(txt)
+        
+    def bin_cell(self,arr):
+        """
+        binning function for the multipole bins
+
+        arr: array : array to bin
+        """
+        return binning.binning(arr,self.binner)
+    
+    def bin_cell_tp(self,arr):
+        """
+        binning function for the multipole bins
+
+        arr: array : array to bin
+        """
+        return binning.binning(arr,self.binnertp)
+    
+    @property
+    def __kfac__(self):
+        """
+        Calculate the factor of wiener filter
+        """
+        nhl = self.MCN0()/self.response_mean()**2
+        fl = self.cl_pp/(self.cl_pp+ nhl )
+        fl[0] = 0
+        fl[1] = 0
+        return fl
 
     @property
     def __observed_spectra__(self):
@@ -126,11 +148,10 @@ class Reconstruction:
 
         return ocl
 
-
-
     def test_obs_for_norm(self):
         """
-        Test the observed spectra for the normalization is visually acceptable.
+        Test the observed spectra for the normalization is 
+        visually acceptable.
         """
         obs = self.__observed_spectra__.copy()
         cmb,_,_ = self.filt_lib.sim_lib.get_cmb_alms(0)
@@ -160,6 +181,8 @@ class Reconstruction:
     def get_phi(self,idx):
         """
         Reconstruct the potential using filtered Fields.
+
+        idx: int : index of the Reconstruction
         """
         fname = os.path.join(self.plm_dir,f"phi_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
@@ -176,10 +199,13 @@ class Reconstruction:
             return glm
 
 
-    def get_N0_sim(self,idx):
+    def N0_sim(self,idx):
         """
-        Reconstruct the potential using filtered Fields with different CMB fields
-        If E modes is from ith simulation then B modes is from (i+1)th simulation
+        Calculate the N0 bias from the Reconstructed potential using filtered Fields
+        with different CMB fields. If E modes is from ith simulation then B modes is 
+        from (i+1)th simulation
+
+        idx: int : index of the N0
         """
         myidx = np.pad(np.arange(self.nsim),(0,1),'constant',constant_values=(0,0))
         fname = os.path.join(self.n0_dir,f"N0_{self.fsky:.2f}_{idx:04d}.pkl")
@@ -205,9 +231,32 @@ class Reconstruction:
             pl.dump(n0cl,open(fname,'wb'))
             return n0cl
 
+    def MCN0(self,n=400):
+        """
+        Calculate the Monte Carlo N0 bias
+
+        n: int : number of simulations
+        """
+
+        def get_N0_mean(n):
+            m = np.zeros(self.Lmax+1,dtype=np.float64)
+            for i in tqdm(range(n), desc='cross spectra stat',unit='simulation'):
+                m += self.N0_sim(i)
+            return m/n
+        
+        fname = os.path.join(self.lib_dir,f"MCN0_{n}_fsky_{self.fsky:.2f}.pkl")
+        if os.path.isfile(fname):
+            arr = pl.load(open(fname,'rb'))
+        else:
+            arr = get_N0_mean(n)
+            pl.dump(arr,open(fname,'wb'))
+        return arr
+
     def RDN0(self,idx):
         """
-        eq(21) in 1412.4760
+        Calculate the Realization Dependent N0 bias
+
+        idx: int : index of the RDN0
         """
 
         fname = os.path.join(self.rdn0_dir,f"RDN0_{self.fsky:.2f}_{idx:04d}.pkl")
@@ -262,36 +311,11 @@ class Reconstruction:
             pl.dump(rdn0,open(fname,'wb'))
             return rdn0
 
-    def job_phi(self):
-        """
-        MPI job for the potential reconstruction.
-        """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            phi = self.get_phi(i)
-        mpi.barrier()
-    
-    def job_N0(self):
-        """
-        MPI job for the potential reconstruction with different CMB fields.
-        """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            phi = self.get_N0_sim(i)
-        mpi.barrier()
-    
-    def job_RDN0(self):
-        """
-        MPI job for the potential reconstruction with different CMB fields.
-        """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            rdn0 = self.RDN0(i)
-        mpi.barrier()
+  
 
     def mean_field(self):
         """
-        Calcualte the mean field.
+        Calcualte the Mean Field bias.
         """
         fname = os.path.join(self.lib_dir,f"MF_fsky_{self.fsky:.2f}_{hash_array(self.mf_array)}.pkl")
         if os.path.isfile(fname):
@@ -304,21 +328,31 @@ class Reconstruction:
             if mpi.rank == 0:
                 pl.dump(arr,open(fname,'wb'))
             return arr
-
-    def __kfac__(self):
-        nhl = self.MCN0()/self.response_mean()**2
-        fl = self.cl_pp/(self.cl_pp+ nhl )
-        fl[0] = 0
-        fl[1] = 0
-        return fl
+    
+    def mean_field_cl(self):
+        """
+        Mean Field bias cl
+        """
+        n = len(self.mf_array)
+        arr =  cs.utils.alm2cl(self.Lmax,self.mean_field())/self.fsky
+        arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
+        return arr
 
     def wf_phi(self,idx):
+        """
+        Calculate the wiener filtered phi.
+
+        idx: int : index of the simulation
+        """
         phi = self.get_phi(idx) - self.mean_field()
-        return cs.utils.almxfl(self.Lmax,self.Lmax,phi,self.__kfac__())
+        return cs.utils.almxfl(self.Lmax,self.Lmax,phi,self.__kfac__)
     
     def deflection_angle(self,idx):
         """
-        Calculate the deflection angle.
+        Calculate the deflection field in spherical harmonics.
+        \sqrt(L(L+1)) \phi
+
+        idx: int : index of the simulation
         """
         wfphi = self.wf_phi(idx)
         dl = np.sqrt(np.arange(self.Lmax + 1, dtype=float) * np.arange(1, self.Lmax + 2))
@@ -328,23 +362,17 @@ class Reconstruction:
     def deflection_map(self,idx):
         """
         Calculate the deflection map.
+
+        idx: int : index of the simulation
         """
         alm = self.deflection_angle(idx)
         return cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,alm)
     
-    
-    def mean_field_cl(self):
-        """
-        Mean field cl
-        """
-        n = len(self.mf_array)
-        arr =  cs.utils.alm2cl(self.Lmax,self.mean_field())/self.fsky
-        arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
-        return arr
-
     def get_phi_cl(self,idx):
         """
-        Get the cl of the potential.
+        Get the cl of the reconstructed potential.
+
+        idx: int : index of the simulation
         """
         if idx in self.mf_array:
             raise ValueError("Simulation already in mean field array")
@@ -354,7 +382,11 @@ class Reconstruction:
 
     def get_input_phi_sim(self,idx):
         """
-        Get the masked input potential alms
+        Get the masked input potential alms. If the total no of sim
+        is less than 200 then the input phi is constant. Otherwise
+        it is varying.
+
+        idx: int : index of the simulation
         """
         if self.nsim <200:
             self.vprint("input phi is constant")
@@ -377,18 +409,11 @@ class Reconstruction:
             pl.dump(plm_n,open(fnamet,'wb')) 
             return plm_n
 
-    def job_input_phi(self):
-        """
-        MPI job for the input potential reconstruction.
-        """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            phi = self.get_input_phi_sim(i)
-        mpi.barrier()
-
     def get_input_phi_cl(self,idx):
         """
         Get the cl of the input potential.
+
+        idx: int : index of the simulation
         """
         return cs.utils.alm2cl(self.Lmax,self.get_input_phi_sim(idx))
 
@@ -396,6 +421,8 @@ class Reconstruction:
     def get_cl_phi_inXout(self,idx):
         """
         get input X output potential
+
+        idx: int : index of the simulation
         """
 
         almi = self.get_input_phi_sim(idx)
@@ -404,9 +431,10 @@ class Reconstruction:
     
     def response(self,idx):
         """
-        Calculate the responce
-
+        Calculate the response
         r = cl^{cross} / cl^{input}
+
+        idx: int : index of the simulation
         """
 
         fname = os.path.join(self.rp_dir,f"response_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
@@ -436,21 +464,14 @@ class Reconstruction:
             pl.dump(r,open(fname,'wb'))
             return r
 
-
-    def job_response(self):
-        """
-        MPI job for the response calculation.
-        """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            Null = self.response(i)
-        mpi.barrier()
-
-
     
     def get_qcl(self,idx,n1=True,rdn0=False):
         """
-        Get the cl_phi = cl_recon - N0 - mean_field
+        Get the cl_phi = cl_recon - mean field - N0 - N1
+
+        idx: int : index of the simulation
+        n1: bool : if True subtract N1
+        rdn0: bool : if True subtract RDN0 else subtract MCN0
         """
         cl = self.get_phi_cl(idx)
         if n1 :
@@ -463,7 +484,11 @@ class Reconstruction:
   
     def get_qcl_wR(self,idx,n1=True,rdn0=False):
         """
-        Get the cl_phi = (cl_recon - N0 - mean_field)/ response*82
+        Get the cl_phi = (cl_recon -  mean field - N0 - N1)/ response**2
+
+        idx: int : index of the simulation
+        n1: bool : if True subtract N1
+        rdn0: bool : if True subtract RDN0 else subtract MCN0
         """
         if rdn0:
             return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.RDN0(idx)/self.response_mean()**2)+self.cl_pp)/100
@@ -471,6 +496,15 @@ class Reconstruction:
             return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
 
     def get_qcl_wR_stat(self,n=400,ret='dl',n1=True,rdn0=False):
+        """
+        Get the total cl_phi
+
+        n: int : number of simulations
+        ret: str : 'dl' or 'cl'
+        n1: bool : if True subtract N1
+        rdn0: bool : if True subtract RDN0 else subtract MCN0
+        """
+
         fname = os.path.join(self.lib_dir,f"qclSTAT_fsky_{self.fsky:.2f}_nbin_{self.nbins}_n_{n}_ret_{ret}_n1_{n1}_rd_{rdn0}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
@@ -490,92 +524,25 @@ class Reconstruction:
             return cl
             
     def bin_corr(self,n=400,ret='cl',n1=True,rdn0=False):
+        """
+        Get the correlation matrix of the total cl_phi
+
+        n: int : number of simulations
+        ret: str : 'dl' or 'cl'
+        n1: bool : if True subtract N1
+        rdn0: bool : if True subtract RDN0 else subtract MCN0
+        """
         s = self.get_qcl_wR_stat(n=n,ret=ret,n1=n1,rdn0=rdn0)
         df = pd.DataFrame(s)
         df.columns = self.B.astype(np.int)
         corr = df.corr()
         return corr
-
-    def plot_bin_cor(self,n=400,ret='cl',n1=True,rdn0=False):
-        corr = self.bin_corr(n=n,ret=ret,n1=n1,rdn0=rdn0)
-        plt.figure(figsize=(10,10))
-        ax = sns.heatmap(corr)
-
-    def plot_qcl_stat(self,n=400,n1=True,rdn0=False):
-        stat = self.get_qcl_wR_stat(n=n,n1=n1,rdn0=rdn0)
-        plt.figure(figsize=(8,7))
-        plt.loglog(self.cl_pp*self.Lfac,label='Fiducial',c='grey',lw=2)
-        plt.loglog(self.Lfac*(self.MCN0()/self.response_mean()**2 ),label='MCN0',c='r')
-        plt.loglog(self.Lfac*self.N1,label='MCN1',c='g')
-        plt.loglog(self.Lfac*self.mean_field_cl(),label='Mean Field',c='b')
-        plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
-        plt.xlim(2,600)
-        plt.legend(ncol=2, fontsize=20)
-        plt.xlabel('L',fontsize=20)
-        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
-        #plt.savefig(f"clpp.pdf",bbox_inches='tight',dpi=300)
-
-    def plot_qcl_stat_low(self,n=400,n1=True):
-        stat = self.get_qcl_wR_stat(n=n,n1=n1)
-        plt.figure(figsize=(8,7))
-        plt.loglog(self.cl_pp*self.Lfac,label='Fiducial',c='grey',lw=2)
-        plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
-        plt.xlim(2,10)
-        plt.legend(ncol=2, fontsize=20)
-        plt.xlabel('L',fontsize=20)
-        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
     
-    def MCN0(self,n=400):
-
-        def get_N0_mean(n):
-            m = np.zeros(self.Lmax+1,dtype=np.float64)
-            for i in tqdm(range(n), desc='corss spectra stat',unit='simulation'):
-                m += self.get_N0_sim(i)
-            return m/n
-        
-        fname = os.path.join(self.lib_dir,f"MCN0_{n}_fsky_{self.fsky:.2f}.pkl")
-        if os.path.isfile(fname):
-            arr = pl.load(open(fname,'rb'))
-        else:
-            arr = get_N0_mean(n)
-            pl.dump(arr,open(fname,'wb'))
-
-        
-        return arr
-
-    def get_qcl_stat(self,n=400,ret='dl',recache=False):
-        fname = os.path.join(self.lib_dir,f"qcl_stat{self.nbins}_{n}_fsky_{self.fsky:.2f}_{ret}.pkl")
-        if os.path.isfile(fname) and (not recache):
-            return pl.load(open(fname,'rb'))
-        else:
-            if ret == 'cl':
-                lfac = 1.0
-            elif ret == 'dl':
-                lfac = self.Lfac
-            else:
-                raise ValueError
-            cl = []
-            for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
-                cl.append(self.bin_cell(lfac*self.get_qcl(i)))
-            
-            cl = np.array(cl)
-            pl.dump(cl,open(fname,'wb'))
-            return cl
-        
-
-    def SNR_phi(self,n=400,n1=True,rdn0=False):
-        cl_pp = self.get_qcl_wR_stat(n,'cl',n1=n1,rdn0=rdn0)
-        stat = ana.statistics(ocl=1.,scl=cl_pp)
-        stat.get_amp(fcl=cl_pp.mean(axis=0))
-        return 1/stat.sA
-
     def get_tXphi(self,idx):
         """
         Get the Cl_{temp, phi}
+
+        idx: int : index of the simulation
         """
         clpp = self.cl_unl['pp'][:self.Lmax+1]
         cltt = self.cl_unl['tt'][:self.Lmax+1]
@@ -588,8 +555,14 @@ class Reconstruction:
         Tlm = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,tmap)
         Plm = self.get_phi(idx) - self.mean_field()
         return cs.utils.alm2cl(self.Lmax,Tlm,Plm)/self.fsky
-    
+        
     def tXphi_stat(self,n,ret='cl'):
+        """
+        Get the total Cl_{temp, phi}
+
+        n: int : number of simulations
+        ret: str : 'dl' or 'cl'
+        """
 
         if ret == 'cl':
             lfac = np.ones(self.Lmax+1)
@@ -608,7 +581,49 @@ class Reconstruction:
             pl.dump(cl,open(fname,'wb'))
             return cl
 
+    def plot_bin_cor(self,n=400,ret='cl',n1=True,rdn0=False):
+        """
+        Plot the correlation matrix of the total cl_phi
+
+        n: int : number of simulations
+        ret: str : 'dl' or 'cl'
+        n1: bool : if True subtract N1
+        rdn0: bool : if True subtract RDN0 else subtract MCN0
+        """
+        corr = self.bin_corr(n=n,ret=ret,n1=n1,rdn0=rdn0)
+        plt.figure(figsize=(10,10))
+        ax = sns.heatmap(corr)
+
+    def plot_qcl_stat(self,n=400,n1=True,rdn0=False):
+        """
+        Plot the mean and std of cl_phi
+
+        n: int : number of simulations
+        n1: bool : if True subtract N1
+        rdn0: bool : if True subtract RDN0 else subtract MCN0
+        """
+        stat = self.get_qcl_wR_stat(n=n,n1=n1,rdn0=rdn0)
+        plt.figure(figsize=(8,7))
+        plt.loglog(self.cl_pp*self.Lfac,label='Fiducial',c='grey',lw=2)
+        plt.loglog(self.Lfac*(self.MCN0()/self.response_mean()**2 ),label='MCN0',c='r')
+        plt.loglog(self.Lfac*self.N1,label='MCN1',c='g')
+        plt.loglog(self.Lfac*self.mean_field_cl(),label='Mean Field',c='b')
+        plt.errorbar(self.B,stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
+        plt.xlim(2,600)
+        plt.legend(ncol=2, fontsize=20)
+        plt.xlabel('L',fontsize=20)
+        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+        #plt.savefig(f"clpp.pdf",bbox_inches='tight',dpi=300)
+    
+
     def plot_tXphi_stat(self,n):
+        """
+        Plot the mean and std of cl_{temp, phi}
+
+        n: int : number of simulations
+        """
         lfac = (self.L*(self.L+1))**2 / 2/(2*np.pi)
         cl = self.tXphi_stat(n,ret='dl')
         plt.figure(figsize=(8,6))
@@ -620,14 +635,88 @@ class Reconstruction:
         plt.xlabel('$\ell$',fontsize=20)
         plt.xticks(fontsize=15)
         plt.yticks(fontsize=15)
+    
+    def SNR_phi(self,n=400,n1=True,rdn0=False):
+        """
+        Calculate the SNR of the reconstructed potential
+
+        n: int : number of simulations
+        n1: bool : if True subtract N1
+        rdn0: bool : if True subtract RDN0 else subtract MCN0
+        """
+        cl_pp = self.get_qcl_wR_stat(n,'cl',n1=n1,rdn0=rdn0)
+        stat = ana.statistics(ocl=1.,scl=cl_pp)
+        stat.get_amp(fcl=cl_pp.mean(axis=0))
+        return 1/stat.sA
 
     def SNR_tp(self,n):
+        """
+        Calculate the SNR of the ISW
+
+        n: int : number of simulations
+        """
+
         cltp = self.tXphi_stat(n,ret='dl')[:,:]
         stat = ana.statistics(ocl=1.,scl=cltp)
         stat.get_amp(fcl=cltp.mean(axis=0))
         return 1/stat.sA
+    
+    def job_phi(self):
+        """
+        MPI job for the potential reconstruction.
+        """
+        job = np.arange(mpi.size)
+        for i in job[mpi.rank::mpi.size]:
+            phi = self.get_phi(i)
+        mpi.barrier()
+    
+    def job_MCN0(self):
+        """
+        MPI job for the potential reconstruction with different CMB fields.
+        """
+        job = np.arange(mpi.size)
+        for i in job[mpi.rank::mpi.size]:
+            phi = self.N0_sim(i)
+        mpi.barrier()
+    
+    def job_RDN0(self):
+        """
+        MPI job for the potential reconstruction with different CMB fields.
+        """
+        job = np.arange(mpi.size)
+        for i in job[mpi.rank::mpi.size]:
+            rdn0 = self.RDN0(i)
+        mpi.barrier()
+
+    def job_response(self):
+        """
+        MPI job for the response calculation.
+        """
+        job = np.arange(mpi.size)
+        for i in job[mpi.rank::mpi.size]:
+            Null = self.response(i)
+        mpi.barrier()
+    
+    def job_input_phi(self):
+        """
+        MPI job for the input potential reconstruction.
+        """
+        job = np.arange(mpi.size)
+        for i in job[mpi.rank::mpi.size]:
+            phi = self.get_input_phi_sim(i)
+        mpi.barrier()
+
+
 
 class N1:
+    """
+    Class to calculate N1
+
+    c_phi_ini: str : the ini file for the CMB potential reconstruction with 
+                     the same input potential
+    v_phi_ini: str : the ini file for the CMB potential reconstruction with
+                     the variying input potential
+    """
 
     def __init__(self,c_phi_ini,v_phi_ini):
         self.c_phi_set = Reconstruction.from_ini(c_phi_ini)
@@ -642,18 +731,20 @@ class N1:
             pl.dump(self.n1,open(fname,'wb'))
 
     def get_n1(self):
+        """
+        Calculate the N1 bias
+        """
         n1 = self.c_phi_set.MCN0(self.c_phi_set.nsim) - self.v_phi_set.MCN0(self.v_phi_set.nsim)
         return n1
     
     def plot_n1(self):
+        """
+        Plot the N1 bias
+        """
         plt.loglog(self.c_phi_set.cl_pp*self.c_phi_set.Lfac)
         plt.loglog(self.n1*self.c_phi_set.Lfac)
         plt.loglog(self.c_phi_set.norm*self.c_phi_set.Lfac)
 
-
-
-
-    
 
 if __name__ == "__main__":
     import argparse
@@ -675,7 +766,7 @@ if __name__ == "__main__":
     
     if args.N0:
         r = Reconstruction.from_ini(ini)
-        r.job_N0()
+        r.job_MCN0()
     
     if args.RDN0:
         r = Reconstruction.from_ini(ini)
@@ -694,5 +785,3 @@ if __name__ == "__main__":
         rv = ini
         n1 = N1(rc,rv)
         
-    
-

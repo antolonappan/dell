@@ -15,9 +15,13 @@ class Filtering:
     """
     Filtering class for component separated CMB Maps
 
+    Parameters
+    ----------
     sim_lib : object : simulation.SimExperimentFG- simulaiton library
     maskpath : string : path to mask
+    fullsky : bool : if True, use fullsky 
     beam : float : beam size in arcmin
+    verbose : bool : if True, print verbose output
     """
     def __init__(self,sim_lib,maskpath,fullsky,beam,verbose=False):
 
@@ -55,6 +59,14 @@ class Filtering:
         print(f"FILTERING object with {'out' if self.sim_lib.noFG else ''} FG: Loaded")
     
     def vprint(self,txt):
+        """
+        print the text if verbose is True
+
+        Parameters
+        ----------
+        txt : string : text to print
+        """
+
         if self.verbose:
             print(txt)
 
@@ -62,6 +74,11 @@ class Filtering:
     def from_ini(cls,ini_file,verbose=False):
         """
         class method to create Filtering object from ini file
+
+        Parameters
+        ----------
+        ini_file : string : path to ini file
+        verbose : bool : if True, print verbose output
         """
         sim_lib = SimExperimentFG.from_ini(ini_file)
         config = toml.load(ini_full(ini_file))
@@ -74,6 +91,10 @@ class Filtering:
     def convolved_TEB(self,idx):
         """
         convolve the component separated map with the beam
+
+        Parameters
+        ----------
+        idx : int : index of the simulation
         """
         T,E,B = self.sim_lib.get_cleaned_cmb(idx)
         hp.almxfl(T,self.beam,inplace=True)
@@ -84,6 +105,10 @@ class Filtering:
     def TQU_to_filter(self,idx):
         """
         Change the convolved ALMs to MAPS
+
+        Parameters
+        ----------
+        idx : int : index of the simulation
         """
         T,E,B = self.convolved_TEB(idx)
         return hp.alm2map([T,E,B],nside=self.nside)
@@ -101,6 +126,11 @@ class Filtering:
     def cinv_EB(self,idx,test=False):
         """
         C inv Filter for the component separated maps
+
+        Parameters
+        ----------
+        idx : int : index of the simulation
+        test : bool : if True, run the filter for 10 iterations
         """
         fsky = f"{self.fsky:.2f}".replace('.','p')
         fname = os.path.join(self.lib_dir,f"cinv_EB_{idx:04d}_fsky_{fsky}.pkl")
@@ -129,6 +159,10 @@ class Filtering:
     def plot_cinv(self,idx):
         """
         plot the cinv filtered Cls for a given idx
+
+        Parameters
+        ----------
+        idx : int : index of the simulation
         """
         _,B = self.cinv_EB(idx)
         _,_,nb = self.sim_lib.noise_spectra(self.sim_lib.nsim)
@@ -139,7 +173,7 @@ class Filtering:
 
     def wiener_EB(self,idx):
         """
-        Not implementer yet
+        Not implemented yet
         useful for delensing
         """
         E, B = self.cinv_EB(idx)
@@ -168,6 +202,3 @@ if __name__ == '__main__':
         filt.run_job()
 
     mpi.barrier()
-
-
-

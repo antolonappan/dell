@@ -820,5 +820,3 @@ if __name__ == '__main__':
         sim.cmb_mean_mpi()
 
     mpi.barrier()
-
-

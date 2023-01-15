@@ -5,12 +5,23 @@ import os
 import seaborn as sns
 
 class Stat:
+    """
+    Statistic class for the Reconstruction publication
+
+    Parameters
+    ----------
+    rec_nofg : object : Reconstruction object with no foregrounds
+    rec_fg : object : Reconstruction object with foregrounds
+    """
 
     def __init__(self,rec_nofg,rec_fg):
         self.rec_nofg = rec_nofg
         self.rec_fg = rec_fg    
 
     def plot_fg_impact(self,save=False):
+        """
+        Plot the impact of foregrounds on the reconstruction
+        """
         rec_nofg = self.rec_nofg
         rec_fg = self.rec_fg
 
@@ -47,6 +58,9 @@ class Stat:
 
 
     def plot_map_dif(self,idx=35,save=False):
+        """
+        Plot the difference between the input and reconstructed maps
+        """
         rec_fg = self.rec_fg
         dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
         fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
@@ -68,6 +82,9 @@ class Stat:
             plt.savefig('def_comp.pdf', bbox_inches='tight',dpi=300)
 
     def SNR_impact(self):
+        """
+        Difference in SNR between the foreground and no foreground case
+        """
         rec_nofg = self.rec_nofg
         rec_fg = self.rec_fg
         SNR_nofg = rec_nofg.SNR_phi(rdn0=True)
