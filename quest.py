@@ -14,7 +14,6 @@ import binning
 import pandas as pd
 import seaborn as sns
 
-
 class Reconstruction:
     """
     Class to reconstruct the lensing potentials from the filtered CMB fields.
@@ -746,10 +745,6 @@ class N1:
         plt.loglog(self.n1*self.c_phi_set.Lfac)
         plt.loglog(self.c_phi_set.norm*self.c_phi_set.Lfac)
 
-
-
-
-    
 
 if __name__ == "__main__":
     import argparse
