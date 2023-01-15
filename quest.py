@@ -25,6 +25,8 @@ class Reconstruction:
     rlmax: int : maximum multipole of CMB for the reconstruction
     cl_unl: str : path to the unlensed CMB power spectrum
     nbins: int : number of bins for the multipole binning
+    tp_nbins: int : number of bins for the multipole binning for the ISW
+    verbose: bool : print the information of the reconstruction
     """
 
     def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose=False):
@@ -78,27 +80,12 @@ class Reconstruction:
         self.vprint(f"QUEST INFO: Maximum CMB multipole - {self.rlmax}")
         self.vprint(f"QUEST INFO: N1 file found - {not np.all(self.N1 == 0)}")
         print(f"QUEST object with {'out' if self.filt_lib.sim_lib.noFG else ''} FG: Loaded")
-    
-    def vprint(self,txt):
-        if self.verbose:
-            print(txt)
-        
-    def bin_cell(self,arr):
-        """
-        binning function for the multipole bins
-        """
-        return binning.binning(arr,self.binner)
-    
-    def bin_cell_tp(self,arr):
-        """
-        binning function for the multipole bins
-        """
-        return binning.binning(arr,self.binnertp)
 
     @classmethod
     def from_ini(cls,ini_file,verbose=False):
         """
-        Load the reconstruction object from a ini file."""
+        Load the reconstruction object from a ini file.
+        """
         filt_lib = Filtering.from_ini(ini_file)
         config = toml.load(ini_full(ini_file))
         rc = config['Reconstruction']
@@ -109,6 +96,31 @@ class Reconstruction:
         nbins = rc['nbins']
         tp_nbins = rc['nbins_tp']
         return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose)
+    
+    def vprint(self,txt):
+        """
+        print only if verbose is true
+
+        txt: str : text to print
+        """
+        if self.verbose:
+            print(txt)
+        
+    def bin_cell(self,arr):
+        """
+        binning function for the multipole bins
+
+        arr: array : array to bin
+        """
+        return binning.binning(arr,self.binner)
+    
+    def bin_cell_tp(self,arr):
+        """
+        binning function for the multipole bins
+
+        arr: array : array to bin
+        """
+        return binning.binning(arr,self.binnertp)
 
     @property
     def __observed_spectra__(self):
@@ -126,11 +138,10 @@ class Reconstruction:
 
         return ocl
 
-
-
     def test_obs_for_norm(self):
         """
-        Test the observed spectra for the normalization is visually acceptable.
+        Test the observed spectra for the normalization is 
+        visually acceptable.
         """
         obs = self.__observed_spectra__.copy()
         cmb,_,_ = self.filt_lib.sim_lib.get_cmb_alms(0)
@@ -160,6 +171,8 @@ class Reconstruction:
     def get_phi(self,idx):
         """
         Reconstruct the potential using filtered Fields.
+
+        idx: int : index of the Reconstruction
         """
         fname = os.path.join(self.plm_dir,f"phi_fsky_{self.fsky:.2f}_{idx:04d}.pkl")
         if os.path.isfile(fname):
@@ -176,10 +189,12 @@ class Reconstruction:
             return glm
 
 
-    def get_N0_sim(self,idx):
+    def N0_sim(self,idx):
         """
         Reconstruct the potential using filtered Fields with different CMB fields
         If E modes is from ith simulation then B modes is from (i+1)th simulation
+
+        idx: int : index of the Rec
         """
         myidx = np.pad(np.arange(self.nsim),(0,1),'constant',constant_values=(0,0))
         fname = os.path.join(self.n0_dir,f"N0_{self.fsky:.2f}_{idx:04d}.pkl")
