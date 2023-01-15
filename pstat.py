@@ -89,5 +89,3 @@ class Stat:
         ax2 = sns.heatmap(rec.bin_corr(rdn0=True))
         ax1.set_title('MCN0')
         ax2.set_title('RDN0')
-
-

@@ -688,27 +688,81 @@ class CMBLensed:
 
 class ForeGround:
 
-    def __init__(self):
+    def __init__(self,fg_str='s1d1',nside=2048):
         self.lb_table = Surveys().get_table_dataframe('LITEBIRD_V1')
         self.fg_dir = '/global/cscratch1/sd/lonappan/S4BIRD/FG'
-        self.fg_str = "s1d1"
-        self.nside = 2048
+        self.fg_str = fg_str
+        self.nside = nside
         os.makedirs(self.fg_dir,exist_ok=True)
+        print(f"Foregrounds: {self.fg_str}")
     
+    @property
     def make(self):
         sky = pysm3.Sky(nside=self.nside, preset_strings=list(map(''.join, zip(*[iter(self.fg_str)]*2))))
         freq = self.lb_table.frequency.values
-        for v in freq:
+        for v in tqdm(freq,desc='Creating Foregrounds', unit='freq'):
             fname = os.path.join(self.fg_dir,f"{self.fg_str}_{int(v)}.fits")
             if not os.path.isfile(fname):
-                print(f"Producing Maps at {v} GHz")
                 maps = sky.get_emission(v * u.GHz)
                 maps = maps.to(u.uK_CMB, equivalencies=u.cmb_equivalencies(v*u.GHz))
                 hp.write_map(fname, maps.value,dtype=np.float64)
-                print(f"Saved {fname}")
             else:
                 print(f"{fname} already exists")
                 continue
+
+    def test_v(self,v,sky=None,plot=False):
+        if sky is None:
+            sky = pysm3.Sky(nside=256, preset_strings=list(map(''.join, zip(*[iter(self.fg_str)]*2))))
+        maps = sky.get_emission(v * u.GHz)
+        maps = maps.to(u.uK_CMB, equivalencies=u.cmb_equivalencies(v*u.GHz))
+        alms_n = hp.map2alm(maps.value)
+        tn = hp.alm2cl(alms_n[0])
+        en = hp.alm2cl(alms_n[1])
+        bn = hp.alm2cl(alms_n[2])
+        del (maps,alms_n)
+        
+        fname = os.path.join(self.fg_dir,f"{self.fg_str}_{int(v)}.fits")
+        maps = hp.read_map(fname,(0,1,2))
+        alms_h = hp.map2alm(hp.ud_grade(maps,256))
+        th = hp.alm2cl(alms_h[0])
+        eh = hp.alm2cl(alms_h[1])
+        bh = hp.alm2cl(alms_h[2])
+        del (maps,alms_h)
+
+        if plot:
+            plt.figure(figsize=(8,8))
+            plt.loglog(tn,label='tn')
+            plt.loglog(th,label='to')
+            plt.loglog(en,label='en')
+            plt.loglog(eh,label='eo')
+            plt.loglog(bn,label='bn')
+            plt.loglog(bh,label='bo')
+        else:
+            return tn,th,en,eh,bn,bh
+
+    @property
+    def test(self):
+        sky = pysm3.Sky(nside=256, preset_strings=list(map(''.join, zip(*[iter(self.fg_str)]*2))))
+        freq = self.lb_table.frequency.values
+        for v in freq:
+            tn,to,en,eo,bn,bo = self.test_v(v,sky=sky)
+            T = np.allclose(tn,to,rtol=1e-3,atol=1e-3)
+            E = np.allclose(en,eo,rtol=1e-3,atol=1e-3)
+            B = np.allclose(bn,bo,rtol=1e-3,atol=1e-3)
+
+            if T and E and B:
+                print(f"Frequency {v}GHz is consistent")
+            else:
+                print(f"Frequency {v}GHz is not consistent")
+    
+
+
+
+            
+
+
+
+
     
 
 
