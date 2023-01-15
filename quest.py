@@ -175,6 +175,7 @@ class Reconstruction:
             pl.dump(glm,open(fname,'wb'))
             return glm
 
+
     def get_N0_sim(self,idx):
         """
         Reconstruct the potential using filtered Fields with different CMB fields
@@ -635,9 +636,10 @@ class N1:
         self.v_phi_set = Reconstruction.from_ini(v_phi_ini)
         fname = os.path.join(self.v_phi_set.lib_dir,'n1.pkl')
         if os.path.isfile(fname):
+            print('Loading N1')
             self.n1 = pl.load(open(fname,'rb'))
         else:
-            self.vprint('Calculating n1')
+            print('Calculating N1')
             self.n1 = self.get_n1()
             pl.dump(self.n1,open(fname,'wb'))
 
@@ -660,28 +662,39 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='ini')
     parser.add_argument('inifile', type=str, nargs=1)
     parser.add_argument('-qlms', dest='qlms', action='store_true', help='reconsturction')
-    parser.add_argument('-N0', dest='N0', action='store_true', help='reconsturction')
+    parser.add_argument('-N0', dest='N0', action='store_true', help='MCN0')
     parser.add_argument('-RDN0', dest='RDN0', action='store_true', help='RDN0')
-    parser.add_argument('-qlms_input', dest='qlms_input', action='store_true', help='reconsturction')
-    parser.add_argument('-resp', dest='resp', action='store_true', help='reconsturction')
+    parser.add_argument('-qlms_input', dest='qlms_input', action='store_true', help='Input Phi')
+    parser.add_argument('-resp', dest='resp', action='store_true', help='response')
+    parser.add_argument('-N1', dest='N1', action='store_true', help='N1')
 
     args = parser.parse_args()
     ini = args.inifile[0]
 
-    r = Reconstruction.from_ini(ini)
-
     if args.qlms:
+        r = Reconstruction.from_ini(ini)
         r.job_phi()
     
     if args.N0:
+        r = Reconstruction.from_ini(ini)
         r.job_N0()
     
     if args.RDN0:
+        r = Reconstruction.from_ini(ini)
         r.job_RDN0()
     
     if args.qlms_input:
+        r = Reconstruction.from_ini(ini)
         r.job_input_phi()
 
     if args.resp:
+        r = Reconstruction.from_ini(ini)
         r.job_response()
+    
+    if args.N1:
+        rc = f"{ini.split('.')[0]}_n1.ini"
+        rv = ini
+        n1 = N1(rc,rv)
+        
+    
 
