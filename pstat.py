@@ -16,7 +16,7 @@ class Stat:
 
     def __init__(self,rec_nofg,rec_fg):
         self.rec_nofg = rec_nofg
-        self.rec_fg = rec_fg    
+        self.rec_fg = rec_fg
 
     def plot_fg_impact(self,save=False):
         """

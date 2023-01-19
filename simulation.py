@@ -64,7 +64,7 @@ class SimExperimentFG:
             os.makedirs(self.mapfolder,exist_ok=True)
             os.makedirs(self.noisefolder,exist_ok=True)
             os.makedirs(self.weightfolder,exist_ok=True)
-        
+
         self.verbose = verbose
 
         self.vprint(f"SIMULATION INFO: CMB Realisation - {self.infolder}")
@@ -76,12 +76,10 @@ class SimExperimentFG:
         self.vprint(f"SIMULATION INFO: NSIDE - {self.dnside}")
         self.vprint(f"SIMULATION INFO: Output folder - {self.outfolder}")
         print(f"SIMUALATION object with {'out' if self.noFG else ''} FG: Loaded")
-    
+
     def vprint(self,txt):
         if self.verbose:
             print(txt)
-
-     
 
     @classmethod
     def from_ini(cls,ini_file,verbose=False):
@@ -754,21 +752,6 @@ class ForeGround:
                 print(f"Frequency {v}GHz is consistent")
             else:
                 print(f"Frequency {v}GHz is not consistent")
-    
-
-
-
-            
-
-
-
-
-    
-
-
-
-
-
 
 
 if __name__ == '__main__':
