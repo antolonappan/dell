@@ -5,7 +5,7 @@
 [![Documentation Status](https://readthedocs.org/projects/dell/badge/?version=latest)](https://dell.readthedocs.io/en/latest/?badge=latest)
 [![GitHub pull-requests](https://img.shields.io/github/issues-pr/antolonappan/dell.svg)](https://GitHub.com/antolonappan/dell/pull/)
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-1f425f.svg)](https://www.python.org/)
-[![Visual Studio](https://img.shields.io/badge/made%20in-VScode-orange)](https://code.visualstudio.com)
+[![Visual Studio](https://img.shields.io/badge/Made%20in-VScode-orange)](https://code.visualstudio.com)
 [![Gitter](https://badges.gitter.im/LBdell/community.svg)](https://gitter.im/LBdell/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 ## Contains
