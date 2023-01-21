@@ -1,11 +1,12 @@
 # DELL [![litebird](https://img.shields.io/static/v1?label=submodule%20of&message=LiteBIRD-Lensing&color=blue)](https://github.com/litebird/LiteBIRD-lensing)
 
 ![example workflow](https://github.com/antolonappan/dell/actions/workflows/update.yml/badge.svg)
-[![wakatime](https://wakatime.com/badge/github/antolonappan/dell.svg)](https://wakatime.com/badge/github/antolonappan/dell)
 [![Documentation Status](https://readthedocs.org/projects/dell/badge/?version=latest)](https://dell.readthedocs.io/en/latest/?badge=latest)
+
+[![wakatime](https://wakatime.com/badge/github/antolonappan/dell.svg)](https://wakatime.com/badge/github/antolonappan/dell)
 [![GitHub pull-requests](https://img.shields.io/github/issues-pr/antolonappan/dell.svg)](https://GitHub.com/antolonappan/dell/pull/)
 [![made-with-python](https://img.shields.io/badge/Made%20with-Python-1f425f.svg)](https://www.python.org/)
-[![Visual Studio](https://badgen.net/badge/icon/VScode?icon=visualstudio&label)](https://code.visualstudio.com)
+[![Visual Studio](https://img.shields.io/badge/Made%20in-VScode-orange)](https://code.visualstudio.com)
 [![Gitter](https://badges.gitter.im/LBdell/community.svg)](https://gitter.im/LBdell/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 ## Contains
