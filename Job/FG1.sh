@@ -4,7 +4,7 @@
 #SBATCH --nodes=32
 #SBATCH --ntasks=500
 #SBATCH --cpus-per-task=1
-#SBATCH -J FG1
+#SBATCH -J FG1_LBIRD
 #SBATCH -o out/fg1.out
 #SBATCH -e out/fg1.err
 #SBATCH --time=02:00:00

@@ -4,7 +4,12 @@ import healpy as hp
 import os
 import seaborn as sns
 
-class Stat:
+
+class simStat:
+    pass
+
+
+class recStat:
     """
     Statistic class for the Reconstruction publication
 
