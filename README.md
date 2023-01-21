@@ -1,6 +1,7 @@
 # DELL [![litebird](https://img.shields.io/static/v1?label=submodule%20of&message=LiteBIRD-Lensing&color=blue)](https://github.com/litebird/LiteBIRD-lensing)
 
 ![example workflow](https://github.com/antolonappan/dell/actions/workflows/update.yml/badge.svg)
+[![CodeQL](https://github.com/antolonappan/dell/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/antolonappan/dell/actions/workflows/github-code-scanning/codeql)
 [![Documentation Status](https://readthedocs.org/projects/dell/badge/?version=latest)](https://dell.readthedocs.io/en/latest/?badge=latest)
 
 [![wakatime](https://wakatime.com/badge/github/antolonappan/dell.svg)](https://wakatime.com/badge/github/antolonappan/dell)
