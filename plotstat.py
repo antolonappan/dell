@@ -6,7 +6,14 @@ import seaborn as sns
 
 
 class simStat:
-    pass
+    
+    def __init__(self,sim_fg1,sim_fg2,fg1='s0d0',fg2='s1d1'):
+        self.sim_fg1 = sim_fg1
+        self.sim_fg2 = sim_fg2
+        self.fg1 = fg1
+        self.fg2 = fg2
+    
+    
 
 
 class recStat:
@@ -49,17 +56,15 @@ class recStat:
         axs[0].semilogy(rec_fg1.Lfac*(rec_fg1.MCN0()/rec_fg1.response_mean()**2 ),label=f'{self.fg1}-MCN0',c='r',)
         axs[0].semilogy(rec_fg2.Lfac*(rec_fg2.MCN0()/rec_fg2.response_mean()**2 ),label=f'{self.fg2}-MCN0',)
         axs[0].semilogy(rec_fg1.Lfac*(rec_nofg.MCN0()/rec_nofg.response_mean()**2 )/100,label='NOFG-MC Error')
-        axs[0].semilogy(rec_fg1.Lfac*(rec_fg1.MCN0()/rec_fg1.response_mean()**2 )/100,label=f'{self.fg2} MC-Error')
         axs[0].semilogy(rec_fg1.Lfac*(rec_fg2.MCN0()/rec_fg2.response_mean()**2 )/100,label=f'{self.fg2} MC-Error')
         axs[0].semilogy(rec_nofg.Lfac*rec_nofg.mean_field_cl(),label='NOFG-MF',c='y')
-        axs[0].semilogy(rec_fg1.Lfac*rec_fg1.mean_field_cl(),label='FG-MF',c='g')
-        axs[0].legend(ncol=3, fontsize=12)
+        axs[0].semilogy(rec_fg2.Lfac*rec_fg2.mean_field_cl(),label=f'{self.fg2}-MF',c='g')
+        axs[0].legend(ncol=2, fontsize=15)
         axs[0].set_ylim(1e-9,1e-5)
         axs[0].set_ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
 
-
-        axs[1].errorbar(rec_fg1.B,fg1_cl.mean(axis=0)/fid,yerr=fg1_cl.std(axis=0)/fid,label=f'{self.fg1}',c='r',fmt='o')
         axs[1].errorbar(rec_fg1.B,nofg_cl.mean(axis=0)/fid,yerr=nofg_cl.std(axis=0)/fid,label='NOFG',c='b',fmt='o')
+        axs[1].errorbar(rec_fg1.B,fg2_cl.mean(axis=0)/fid,yerr=fg2_cl.std(axis=0)/fid,label=f'{self.fg2}',c='r',fmt='o')
         axs[1].set_ylim(-0.1,2.3)
         axs[1].legend(ncol=2, fontsize=15,loc='upper left')
         axs[1].axhline(1,c='k')
