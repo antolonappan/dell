@@ -2,3 +2,4 @@
 *.err
 .ipynb_checkpoints
 /__pycache__
+*.pkl

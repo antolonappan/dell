@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import healpy as hp
 import os
 import seaborn as sns
+import pickle as pl
+
 
 
 class simStat:
@@ -10,10 +12,82 @@ class simStat:
     def __init__(self,sim_fg1,sim_fg2,fg1='s0d0',fg2='s1d1'):
         self.sim_fg1 = sim_fg1
         self.sim_fg2 = sim_fg2
+        assert self.sim_fg1.lmax == self.sim_fg2.lmax
+        self.lmax = self.sim_fg1.lmax
         self.fg1 = fg1
         self.fg2 = fg2
     
+    def plot_fg1(self):
+        fname = f'../Data/paper/simFG1.pkl'
+        if os.path.isfile(fname):
+            data = pl.load(open(fname,'rb'))
+            print('Data Loaded from file')
+            stat1 = data['stat1']
+            stat2 = data['stat2']
+        else:
+            data = {}
+            stat1 = self.sim_fg1.cl_stat(100)
+            stat2 = self.sim_fg2.cl_stat(100)
+            data['stat1'] = stat1
+            data['stat2'] = stat2
+            data['fid_ee'] = self.sim_fg1.cl_len[1,:]*self.sim_fg1.Tcmb**2
+            data['fid_bb'] = self.sim_fg1.cl_len[2,:]*self.sim_fg1.Tcmb**2
+            data['l'] = np.arange(self.lmax+1)
+            data['fg1'] = self.fg1
+            data['fg2'] = self.fg2
+            pl.dump(data,open(fname,'wb'))
+            print('Data Saved to file')
+        plt.figure(figsize=(8,8))
+        plt.loglog(data['fid_ee'] ,c='k',ls='--',lw=2,label="Fiducial EE")
+        plt.loglog(data['fid_bb'] ,c='k',ls='-.',lw=2,label="Fiducial BB")
+        plt.loglog(stat1[0],label=f"{data['fg1']} EE",c='r',lw=2)
+        plt.fill_between(data['l'],stat1[0]-(stat1[1]),stat1[0]+stat1[1],color='r',alpha=0.5)
+        plt.loglog(stat1[2],label=f"{data['fg1']} BB",c='b',lw=2)
+        plt.fill_between(data['l'],stat1[2]-stat1[3],stat1[2]+stat1[3],color='b',alpha=0.5)
+        plt.loglog(stat2[0],label=f"{data['fg2']} EE",c='g',lw=2)
+        plt.fill_between(data['l'],stat2[0]-(stat2[1]),stat2[0]+stat2[1],color='g',alpha=0.5)
+        plt.loglog(stat2[2],label=f"{data['fg2']} BB",c='magenta',lw=2)
+        plt.fill_between(data['l'],stat2[2]-stat2[3],stat2[2]+stat2[3],color='magenta',alpha=0.5)
+        plt.xlim(2,800)
+        plt.ylim(1e-7,10)
+        plt.legend(ncol=3,fontsize=15)
+        plt.xlabel("$\ell$",fontsize=20)
+        plt.ylabel("$\frac{1}{b_\ell^2}\left(C_\ell + C_\ell^{FG\;res} + N_\ell \right)$ [$\mu K^2$]",fontsize=20)
+        plt.tick_params(labelsize=20)
     
+    def plot_fg2(self):
+        l = np.arange(self.lmax+1)
+        _,fg1_nl_e,fg1_nl_b = self.sim_fg1.noise_spectra(500)
+        _,fg2_nl_e,fg2_nl_b = self.sim_fg2.noise_spectra(500)
+        _,fg1_res_e,fg1_res_b = self.sim_fg1.fg_res_mean(500)
+        _,fg2_res_e,fg2_res_b = self.sim_fg2.fg_res_mean(500)
+        fg1_rnl_b = fg1_nl_b + fg1_res_b
+        fg2_rnl_b = fg2_nl_b + fg2_res_b
+        fg1_rnl_e = fg1_nl_e + fg1_res_e
+        fg2_rnl_e = fg2_nl_e + fg2_res_e
+        lfac = (l*(l+1))/(2*np.pi)
+        plt.figure(figsize=(16, 8))
+        fig, (ax1, ax2)  = plt.subplots(1, 2,figsize=(16, 8))
+
+        ax1.loglog(self.sim_fg1.cl_len[1,:]*self.sim_fg1.Tcmb**2 ,c='k',lw=2,label="Fiducial EE")
+        ax1.loglog(fg1_rnl_e*self.sim_fg1.Tcmb**2 ,label=f"{self.fg1}",c='r',lw=2,)
+        ax1.loglog(fg2_rnl_e*self.sim_fg1.Tcmb**2 ,label=f"{self.fg2}",c='g',lw=2)
+        ax1.legend(fontsize=15)
+        ax1.set_xlabel("$\ell$",fontsize=20)
+        ax1.set_ylabel("$\\frac{1}{b_\ell^2}\\left(C_\ell^{FG\;res} + N_\ell \\right)$ [$\mu K^2$]",fontsize=20)
+        ax1.set_xlim(2,600)
+
+        ax2.loglog(self.sim_fg1.cl_len[2,:]*self.sim_fg1.Tcmb**2 ,c='k',lw=2,label="Fiducial BB")
+        ax2.loglog(fg1_rnl_b*self.sim_fg1.Tcmb**2 ,label=f"{self.fg1}",c='b',lw=2)
+        ax2.loglog(fg2_rnl_b*self.sim_fg1.Tcmb**2 ,label=f"{self.fg2}",c='magenta',lw=2)
+        ax2.legend(fontsize=15)
+        ax2.set_xlabel("$\ell$",fontsize=20)
+        ax2.set_xlim(2,600)
+        
+
+
+
+
 
 
 class recStat:
@@ -42,7 +116,6 @@ class recStat:
         rec_fg2 = self.rec_fg2
 
         nofg_cl = rec_nofg.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
-        fg1_cl = rec_fg1.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
         fg2_cl = rec_fg2.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
         fid = rec_fg1.bin_cell(rec_fg1.cl_pp*rec_fg1.Lfac)
 
@@ -128,6 +201,7 @@ class recStat:
 
         f,(ax1,ax2, axcb) = plt.subplots(1,3, 
             gridspec_kw={'width_ratios':[1,1,0.08]},figsize=(10,5))
+
         ax1.get_shared_y_axes().join(ax1,ax2)
         g1 = sns.heatmap(rec.bin_corr(),cmap="coolwarm",cbar=False,ax=ax1)
         g1.set_ylabel('')
