@@ -9,7 +9,7 @@ import pickle as pl
 
 class simStat:
     
-    def __init__(self,sim_fg1,sim_fg2,fg1='s0d0',fg2='s1d1'):
+    def __init__(self,sim_fg1=None,sim_fg2=None,fg1='s0d0',fg2='s1d1'):
         self.sim_fg1 = sim_fg1
         self.sim_fg2 = sim_fg2
         assert self.sim_fg1.lmax == self.sim_fg2.lmax
@@ -115,7 +115,7 @@ class recStat:
     rec_fg1 : object : Reconstruction object with foregrounds
     """
 
-    def __init__(self,rec_nofg,rec_fg1,rec_fg2,fg1='s0d0',fg2='s1d1'):
+    def __init__(self,rec_nofg=None,rec_fg1=None,rec_fg2=None,fg1='s0d0',fg2='s1d1'):
         self.rec_nofg = rec_nofg
         self.rec_fg1 = rec_fg1
         self.rec_fg2 = rec_fg2
@@ -186,25 +186,38 @@ class recStat:
             plt.savefig('fg_impact.pdf', bbox_inches='tight',dpi=300)
 
 
-    def plot_map_dif(self,idx=35,save=False,swap=False):
+    def plot_map_dif(self,idx=35,save=False):
         """
         Plot the difference between the input and reconstructed maps
         """
-        if swap:
-            rec_fg1 = self.rec_fg2
+        fnamei = '../Data/paper/phi_input_35.fits'
+        fnameo = '../Data/paper/phi_output_35.fits'
+
+        if os.path.exists(fnamei):
+            input = hp.read_map(fnamei)
+            print('Input Map Loaded from file')
         else:
-            rec_fg1 = self.rec_fg1
-        dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
-        fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
-        phi = hp.read_alm(fname)
-        DfacL = np.arange(1025)
-        Dfac = np.sqrt(DfacL*(DfacL+1))
-        Dfac[:10] = 0
-        dphi = hp.almxfl(phi,Dfac)
-        input = hp.ma(hp.alm2map(dphi,512))
-        input.mask = np.logical_not(rec_fg1.mask)
-        output = hp.ma(rec_fg1.deflection_map(idx))
-        output.mask = np.logical_not(rec_fg1.mask)
+            rec_fg2 = self.rec_fg2
+            dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
+            fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
+            phi = hp.read_alm(fname)
+            DfacL = np.arange(1025)
+            Dfac = np.sqrt(DfacL*(DfacL+1))
+            Dfac[:10] = 0
+            dphi = hp.almxfl(phi,Dfac)
+            input = hp.ma(hp.alm2map(dphi,512))
+            input.mask = np.logical_not(rec_fg2.mask)
+            hp.write_map(fnamei,input)
+            print('Input Map Saved to file')
+        
+        if os.path.exists(fnameo):
+            output = hp.read_map(fnameo)
+            print('Output Map Loaded from file')
+        else:
+            output = hp.ma(rec_fg2.deflection_map(idx))
+            output.mask = np.logical_not(rec_fg2.mask)
+            hp.write_map(fnameo,output)
+            print('Output Map Saved to file')
 
         plt.figure(figsize=(20,20))
         plt.subplots_adjust(wspace=5)
@@ -217,36 +230,88 @@ class recStat:
         """
         Difference in SNR between the foreground and no foreground case
         """
-        rec_nofg = self.rec_nofg
-        rec_fg1 = self.rec_fg1
-        rec_fg2 = self.rec_fg2
-        SNR_nofg = rec_nofg.SNR_phi(rdn0=True)
-        SNR_fg1 = rec_fg1.SNR_phi(rdn0=True)
-        SNR_fg2 = rec_fg2.SNR_phi(rdn0=True)
+        fname = '../Data/paper/snr.pkl'
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('SNR Loaded from file')
+        else:
+            data = {}
+            rec_nofg = self.rec_nofg
+            rec_fg1 = self.rec_fg1
+            rec_fg2 = self.rec_fg2
+            data['NOFG-SNR'] = rec_nofg.SNR_phi(rdn0=True)
+            data['fg1-SNR'] = rec_fg1.SNR_phi(rdn0=True)
+            data['fg2-SNR'] = rec_fg2.SNR_phi(rdn0=True)
+            pl.dump(data,open(fname,'wb'))
+            print('SNR Saved to file')
+
+        SNR_nofg =  data['NOFG-SNR']
+        SNR_fg1 = data['fg1-SNR']
+        SNR_fg2 = data['fg2-SNR']
 
         print(f"SNR NOFG: {SNR_nofg:.2f}")
         print(f"SNR FG1: {SNR_fg1:.2f} decreased by {(1-SNR_fg1/SNR_nofg)*100:.2f} %")
         print(f"SNR FG2: {SNR_fg2:.2f} decreased by {(1-SNR_fg2/SNR_nofg)*100:.2f} %")
     
-    def plot_bin_corr_comp(self,which=1):
-        if which == 1:
-            rec = self.rec_fg1
-        elif which == 2:
-            rec = self.rec_fg2
-        elif which == 0:
-            rec = self.rec_nofg
+    def plot_qcl_stat(self):
+        fname = '../Data/paper/recQCL.pkl'
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('Data Loaded from file')
         else:
-            raise ValueError("which must be 0,1,2")
+            data = {}
+            data['stat']= self.rec_fg2.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
+            data['fid'] = self.rec_fg2.cl_pp*self.rec_fg2.Lfac
+            data['mcn0'] = self.rec_fg2.Lfac*(self.rec_fg2.MCN0()/self.rec_fg2.response_mean()**2 )
+            data['mcn1'] = self.rec_fg2.Lfac*self.rec_fg2.N1
+            data['mf'] = self.rec_fg2.Lfac*self.rec_fg2.mean_field_cl()
+            data['B'] = self.rec_fg2.B
+            pl.dump(data,open(fname,'wb'))
+            print('Data Saved to file')
+
+        
+        stat = data['stat']
+        plt.figure(figsize=(8,7))
+        plt.loglog(data['fid'],label='Fiducial',c='grey',lw=2)
+        plt.loglog(data['mcn0'],label='MCN0',c='r')
+        plt.loglog(data['mcn1'],label='MCN1',c='g')
+        plt.loglog(data['mf'],label='Mean Field',c='b')
+        plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
+        plt.xlim(2,600)
+        plt.legend(ncol=2, fontsize=20)
+        plt.xlabel('L',fontsize=20)
+        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+    
+    def plot_bin_corr_comp(self,which=1):
+        fname = f'../Data/paper/bin_corr.pkl'
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('Data Loaded from file')
+        else:
+            data = [None,None,None]
+            data[0] = {}
+            data[0]['mcn0'] = self.rec_nofg.bin_corr()
+            data[0]['rdn0'] = self.rec_nofg.bin_corr(rdn0=True)
+            data[1] = {}
+            data[1]['mcn0'] = self.rec_fg1.bin_corr()
+            data[1]['rdn0'] = self.rec_fg1.bin_corr(rdn0=True)
+            data[2] = {}
+            data[2]['mcn0'] = self.rec_fg2.bin_corr()
+            data[2]['rdn0'] = self.rec_fg2.bin_corr(rdn0=True)
+            pl.dump(data,open(fname,'wb'))
+            print('Data Saved to file')
 
         f,(ax1,ax2, axcb) = plt.subplots(1,3, 
             gridspec_kw={'width_ratios':[1,1,0.08]},figsize=(10,5))
 
         ax1.get_shared_y_axes().join(ax1,ax2)
-        g1 = sns.heatmap(rec.bin_corr(),cmap="coolwarm",cbar=False,ax=ax1)
+        g1 = sns.heatmap(data[which]['mcn0'],cmap="coolwarm",cbar=False,ax=ax1)
         g1.set_ylabel('')
         g1.set_xlabel('')
         g1.set_title('MCN0')
-        g2 = sns.heatmap(rec.bin_corr(rdn0=True),cmap="coolwarm",ax=ax2, cbar_ax=axcb)
+        g2 = sns.heatmap(data[which]['rdn0'],cmap="coolwarm",ax=ax2, cbar_ax=axcb)
         g2.set_ylabel('')
         g2.set_xlabel('')
         g2.set_yticks([])
