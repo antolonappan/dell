@@ -101,10 +101,12 @@ class simStat:
             _,fg2_nl_e,fg2_nl_b = self.sim_fg2.noise_spectra(500)
             _,fg1_res_e,fg1_res_b = self.sim_fg1.fg_res_mean(500)
             _,fg2_res_e,fg2_res_b = self.sim_fg2.fg_res_mean(500)
-            data['fg1_rnl_b'] = fg1_nl_b + fg1_res_b
-            data['fg2_rnl_b'] = fg2_nl_b + fg2_res_b
-            data['fg1_rnl_e'] = fg1_nl_e + fg1_res_e
-            data['fg2_rnl_e'] = fg2_nl_e + fg2_res_e
+            data['fg1_rnl_b'] = (fg1_nl_b + fg1_res_b)*self.sim_fg1.Tcmb**2
+            data['fg2_rnl_b'] = (fg2_nl_b + fg2_res_b)*self.sim_fg1.Tcmb**2
+            data['fg1_rnl_e'] = (fg1_nl_e + fg1_res_e)*self.sim_fg1.Tcmb**2
+            data['fg2_rnl_e'] = (fg2_nl_e + fg2_res_e)*self.sim_fg1.Tcmb**2
+            data['fid_ee'] = self.sim_fg1.cl_len[1,:]*self.sim_fg1.Tcmb**2
+            data['fid_bb'] = self.sim_fg1.cl_len[2,:]*self.sim_fg1.Tcmb**2
             pl.dump(data,open(fname,'wb'))
             print('Data Saved to file')
         else:
@@ -120,18 +122,18 @@ class simStat:
         plt.figure(figsize=(16, 8))
         fig, (ax1, ax2)  = plt.subplots(1, 2,figsize=(16, 8))
 
-        ax1.loglog(self.sim_fg1.cl_len[1,:]*self.sim_fg1.Tcmb**2 ,c='k',lw=2,label="Fiducial EE")
-        ax1.loglog(fg1_rnl_e*self.sim_fg1.Tcmb**2 ,label=f"{self.fg1}",c='r',lw=2,)
-        ax1.loglog(fg2_rnl_e*self.sim_fg1.Tcmb**2 ,label=f"{self.fg2}",c='g',lw=2)
+        ax1.loglog(data['fid_ee'] ,c='k',lw=2,label="Fiducial EE")
+        ax1.loglog(fg1_rnl_e ,label=f"{self.fg1}",c='r',lw=2,)
+        ax1.loglog(fg2_rnl_e ,label=f"{self.fg2}",c='g',lw=2)
         ax1.legend(fontsize=15)
         ax1.set_xlabel("$\ell$",fontsize=20)
         ax1.set_ylabel("$\\frac{1}{b_\ell^2}\\left(C_\ell^{fg_{res}} + N_\ell \\right)$ [$\mu K^2$]",fontsize=20)
         ax1.set_xlim(2,600)
         ax1.set_ylim(1e-6,1e-1)
 
-        ax2.loglog(self.sim_fg1.cl_len[2,:]*self.sim_fg1.Tcmb**2 ,c='k',lw=2,label="Fiducial BB")
-        ax2.loglog(fg1_rnl_b*self.sim_fg1.Tcmb**2 ,label=f"{self.fg1}",c='b',lw=2)
-        ax2.loglog(fg2_rnl_b*self.sim_fg1.Tcmb**2 ,label=f"{self.fg2}",c='magenta',lw=2)
+        ax2.loglog(data['fid_bb'] ,c='k',lw=2,label="Fiducial BB")
+        ax2.loglog(fg1_rnl_b ,label=f"{self.fg1}",c='b',lw=2)
+        ax2.loglog(fg2_rnl_b ,label=f"{self.fg2}",c='magenta',lw=2)
         ax2.legend(fontsize=15)
         ax2.set_xlabel("$\ell$",fontsize=20)
         ax2.set_ylim(1e-7,1e-2)
