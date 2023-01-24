@@ -4,6 +4,41 @@ import healpy as hp
 import os
 import seaborn as sns
 import pickle as pl
+import socket
+
+if socket.gethostname() == 'vmi401751.contaboserver.net':
+    print('Running on VPS')
+    plt.rcParams['text.usetex']=True
+    plt.rcParams['ytick.minor.visible'] =True
+    plt.rcParams['xtick.minor.visible'] = True
+    plt.rcParams['xtick.top'] = True
+    plt.rcParams['ytick.right'] = True
+    plt.rcParams['font.size'] = '20'
+    plt.rcParams['legend.fontsize'] = '15'
+    plt.rcParams['legend.borderaxespad'] = '1.9'
+    plt.rcParams['legend.numpoints'] = '1'
+    plt.rcParams['figure.titlesize'] = 'medium'
+    plt.rcParams['xtick.major.size'] = '10'
+    plt.rcParams['xtick.minor.size'] = '6'
+    plt.rcParams['xtick.major.width'] = '2'
+    plt.rcParams['xtick.minor.width'] = '1'
+    plt.rcParams['ytick.major.size'] = '10'
+    plt.rcParams['ytick.minor.size'] = '6'
+    plt.rcParams['ytick.major.width'] = '2'
+    plt.rcParams['ytick.minor.width'] = '1'
+    plt.rcParams['xtick.direction'] = 'in'
+    plt.rcParams['ytick.direction'] = 'in'
+    plt.rcParams['axes.labelpad'] = '7.0'
+    plt.rcParams['axes.formatter.limits']=-10,10
+    plt.rcParams['xtick.labelsize'] = '15'
+    plt.rcParams['ytick.labelsize'] = '15'
+    plt.rcParams['axes.labelsize'] = '30'
+    plt.rcParams['axes.labelsize'] = '30'
+    plt.rcParams['xtick.major.pad']='10'
+    plt.rcParams['xtick.minor.pad']='10'
+    plt.rcParams['hatch.color'] = 'black'
+    plt.rcParams['lines.dashed_pattern']=3, 1.5
+
 
 
 
