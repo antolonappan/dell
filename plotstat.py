@@ -7,15 +7,14 @@ import pickle as pl
 import socket
 
 if socket.gethostname() == 'vmi401751.contaboserver.net':
-    print('Running on VPS')
     plt.rcParams['text.usetex']=True
     plt.rcParams['ytick.minor.visible'] =True
     plt.rcParams['xtick.minor.visible'] = True
     plt.rcParams['xtick.top'] = True
     plt.rcParams['ytick.right'] = True
     plt.rcParams['font.size'] = '20'
-    plt.rcParams['legend.fontsize'] = '15'
-    plt.rcParams['legend.borderaxespad'] = '1.9'
+    plt.rcParams['legend.fontsize'] = '18'
+    plt.rcParams['legend.borderaxespad'] = '1'
     plt.rcParams['legend.numpoints'] = '1'
     plt.rcParams['figure.titlesize'] = 'medium'
     plt.rcParams['xtick.major.size'] = '10'
@@ -30,8 +29,8 @@ if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['ytick.direction'] = 'in'
     plt.rcParams['axes.labelpad'] = '7.0'
     plt.rcParams['axes.formatter.limits']=-10,10
-    plt.rcParams['xtick.labelsize'] = '15'
-    plt.rcParams['ytick.labelsize'] = '15'
+    plt.rcParams['xtick.labelsize'] = '20'
+    plt.rcParams['ytick.labelsize'] = '20'
     plt.rcParams['axes.labelsize'] = '30'
     plt.rcParams['axes.labelsize'] = '30'
     plt.rcParams['xtick.major.pad']='10'
@@ -55,7 +54,7 @@ class simStat:
         self.fg1 = fg1
         self.fg2 = fg2
     
-    def plot_fg1(self):
+    def plot_fg1(self,save=False):
         fname = '../Data/paper/simFG1.pkl'
         if os.path.isfile(fname):
             data = pl.load(open(fname,'rb'))
@@ -76,24 +75,26 @@ class simStat:
             pl.dump(data,open(fname,'wb'))
             print('Data Saved to file')
         plt.figure(figsize=(8,8))
-        plt.loglog(data['fid_ee'] ,c='k',ls='--',lw=2,label="Fiducial EE")
-        plt.loglog(data['fid_bb'] ,c='k',ls='-.',lw=2,label="Fiducial BB")
-        plt.loglog(stat1[0],label=f"{data['fg1']} EE",c='r',lw=2)
+        plt.loglog(data['fid_ee'] ,c='k',ls='--',lw=2,label="$Fiducial$ EE")
+        plt.loglog(data['fid_bb'] ,c='k',ls='-.',lw=2,label="$Fiducial$ BB")
+        plt.loglog(stat1[0],label=f"${data['fg1']}$ EE",c='r',lw=2)
         plt.fill_between(data['l'],stat1[0]-(stat1[1]),stat1[0]+stat1[1],color='r',alpha=0.5)
-        plt.loglog(stat1[2],label=f"{data['fg1']} BB",c='b',lw=2)
+        plt.loglog(stat1[2],label=f"${data['fg1']}$ BB",c='b',lw=2)
         plt.fill_between(data['l'],stat1[2]-stat1[3],stat1[2]+stat1[3],color='b',alpha=0.5)
-        plt.loglog(stat2[0],label=f"{data['fg2']} EE",c='g',lw=2)
+        plt.loglog(stat2[0],label=f"${data['fg2']}$ EE",c='g',lw=2)
         plt.fill_between(data['l'],stat2[0]-(stat2[1]),stat2[0]+stat2[1],color='g',alpha=0.5)
-        plt.loglog(stat2[2],label=f"{data['fg2']} BB",c='magenta',lw=2)
+        plt.loglog(stat2[2],label=f"${data['fg2']}$ BB",c='magenta',lw=2)
         plt.fill_between(data['l'],stat2[2]-stat2[3],stat2[2]+stat2[3],color='magenta',alpha=0.5)
         plt.xlim(2,800)
         plt.ylim(1e-7,10)
-        plt.legend(ncol=3,fontsize=15)
-        plt.xlabel(r"$\ell$",fontsize=20)
-        plt.ylabel("$\\frac{1}{b_\ell^2}\\left(C_\ell + C_\ell^{FG\;res} + N_\ell \\right)$ [$\mu K^2$]",fontsize=20)
+        plt.legend(ncol=3,fontsize=16)
+        plt.xlabel("$\ell$",fontsize=25)
+        plt.ylabel("$\\frac{1}{b_\ell^2}\\left(C^{fid}_\ell + C_\ell^{fg_{res}} + N_\ell \\right)$ [$\mu K^2$]",fontsize=25)
         plt.tick_params(labelsize=20)
+        if save:
+            plt.savefig('plots/simFG1.pdf',bbox_inches='tight',dpi=300)
     
-    def plot_fg2(self):
+    def plot_fg2(self,save=False):
         fname = '../Data/paper/simFG2.pkl'
         if not os.path.isfile(fname):
             data = {}
@@ -122,22 +123,25 @@ class simStat:
         plt.figure(figsize=(16, 8))
         fig, (ax1, ax2)  = plt.subplots(1, 2,figsize=(16, 8))
 
-        ax1.loglog(data['fid_ee'] ,c='k',lw=2,label="Fiducial EE")
-        ax1.loglog(fg1_rnl_e ,label=f"{self.fg1}",c='r',lw=2,)
-        ax1.loglog(fg2_rnl_e ,label=f"{self.fg2}",c='g',lw=2)
-        ax1.legend(fontsize=15)
-        ax1.set_xlabel("$\ell$",fontsize=20)
-        ax1.set_ylabel("$\\frac{1}{b_\ell^2}\\left(C_\ell^{fg_{res}} + N_\ell \\right)$ [$\mu K^2$]",fontsize=20)
+        ax1.loglog(data['fid_ee'] ,c='k',lw=2,label="$Fiducial$ EE")
+        ax1.loglog(fg1_rnl_e ,label=f"${self.fg1}$",c='r',lw=2,)
+        ax1.loglog(fg2_rnl_e ,label=f"${self.fg2}$",c='g',lw=2)
+        ax1.legend(fontsize=20)
+        ax1.set_xlabel("$\ell$",fontsize=25)
+        ax1.set_ylabel("$\\frac{1}{b_\ell^2}\\left(C_\ell^{fg_{res}} + N_\ell \\right)$ [$\mu K^2$]",fontsize=25)
         ax1.set_xlim(2,600)
         ax1.set_ylim(1e-6,1e-1)
 
-        ax2.loglog(data['fid_bb'] ,c='k',lw=2,label="Fiducial BB")
-        ax2.loglog(fg1_rnl_b ,label=f"{self.fg1}",c='b',lw=2)
-        ax2.loglog(fg2_rnl_b ,label=f"{self.fg2}",c='magenta',lw=2)
-        ax2.legend(fontsize=15)
-        ax2.set_xlabel("$\ell$",fontsize=20)
+        ax2.loglog(data['fid_bb'] ,c='k',lw=2,label="$Fiducial$ BB")
+        ax2.loglog(fg1_rnl_b ,label=f"${self.fg1}$",c='b',lw=2)
+        ax2.loglog(fg2_rnl_b ,label=f"${self.fg2}$",c='magenta',lw=2)
+        ax2.legend(fontsize=20)
+        ax2.set_xlabel("$\ell$",fontsize=25)
         ax2.set_ylim(1e-7,1e-2)
         ax2.set_xlim(2,600)
+
+        if save:
+            plt.savefig('plots/simFG2.pdf',bbox_inches='tight',dpi=300)
         
 
 
@@ -203,27 +207,27 @@ class recStat:
         fig.subplots_adjust(hspace=0)
 
 
-        axs[0].semilogy(data['fidm'],label='Fiducial',c='grey',lw=2)
-        axs[0].semilogy(data['NOFG-MCN0'],label='NOFG-MCN0',c='b')
-        axs[0].semilogy(data['fg1-MCN0'],label=f'{self.fg1}-MCN0',c='r',)
-        axs[0].semilogy(data['fg2-MCN0'],label=f'{self.fg2}-MCN0',)
-        axs[0].semilogy(data['NOFG-MCER'],label='NOFG-MC Error')
-        axs[0].semilogy(data['fg2-MCER'],label=f'{self.fg2} MC-Error')
-        axs[0].semilogy(data['NOFG-MF'],label='NOFG-MF',c='y')
-        axs[0].semilogy(data['fg2-MF'],label=f'{self.fg2}-MF',c='g')
-        axs[0].legend(ncol=2, fontsize=15)
+        axs[0].semilogy(data['fidm'],label='$Fiducial$',c='grey',lw=2)
+        axs[0].semilogy(data['NOFG-MCN0'],label='NOFG $N_L^{(0),MC}$',c='b')
+        axs[0].semilogy(data['fg1-MCN0'],label=f"${self.fg1}$"+ " $N_L^{(0),MC}$",c='r',)
+        axs[0].semilogy(data['fg2-MCN0'],label=f"${self.fg2}$"+ " $N_L^{(0),MC}$",)
+        axs[0].semilogy(data['NOFG-MCER'],label='NOFG $C_L^{MC}$')
+        axs[0].semilogy(data['fg2-MCER'],label=f"${self.fg2}$"+ " $C_L^{MC}$")
+        axs[0].semilogy(data['NOFG-MF'],label='NOFG $C_L^{MF}$',c='y')
+        axs[0].semilogy(data['fg2-MF'],label=f"${self.fg2}$"+ " $C_L^{MF}$",c='g')
+        axs[0].legend(ncol=3, fontsize=16,frameon=False)
         axs[0].set_ylim(1e-9,1e-5)
-        axs[0].set_ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
+        axs[0].set_ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=25)
 
-        axs[1].errorbar(data['B'],nofg_cl.mean(axis=0)/fid,yerr=nofg_cl.std(axis=0)/fid,label='NOFG',c='b',fmt='o')
         axs[1].errorbar(data['B'],fg2_cl.mean(axis=0)/fid,yerr=fg2_cl.std(axis=0)/fid,label=f'{self.fg2}',c='r',fmt='o')
+        axs[1].errorbar(data['B'],nofg_cl.mean(axis=0)/fid,yerr=nofg_cl.std(axis=0)/fid,label='NOFG',c='b',fmt='o')
         axs[1].set_ylim(-0.1,2.3)
         axs[1].legend(ncol=2, fontsize=15,loc='upper left')
         axs[1].axhline(1,c='k')
-        axs[1].set_ylabel('$\\frac{C_L^{\phi\phi,rec}}{C_L^{\phi\phi,fid}}$',fontsize=20)
-        axs[1].set_xlabel('$L$',fontsize=20)
+        axs[1].set_ylabel('$\\frac{C_L^{\phi\phi,rec}}{C_L^{\phi\phi,fid}}$',fontsize=25)
+        axs[1].set_xlabel("$L$",fontsize=25)
         if save:
-            plt.savefig('fg_impact.pdf', bbox_inches='tight',dpi=300)
+            plt.savefig('plots/recFG.pdf', bbox_inches='tight',dpi=300)
 
 
     def plot_map_dif(self,idx=35,save=False):
@@ -264,7 +268,7 @@ class recStat:
         hp.mollview(input,norm='hist',min=-.0005,max=.001,title='$\\sqrt{L(L+1)}\phi^{input}_{LM}$',sub=(1,2,1),notext=True)
         hp.mollview(output,norm='hist',min=-.0005,max=.001,title='$\\sqrt{L(L+1)}\phi^{WF,rec}_{LM}$',sub=(1,2,2),notext=True)
         if save:
-            plt.savefig('def_comp.pdf', bbox_inches='tight',dpi=300)
+            plt.savefig('plots/recMaps.pdf', bbox_inches='tight',dpi=300)
 
     def SNR_impact(self):
         """
@@ -293,7 +297,7 @@ class recStat:
         print(f"SNR FG1: {SNR_fg1:.2f} decreased by {(1-SNR_fg1/SNR_nofg)*100:.2f} %")
         print(f"SNR FG2: {SNR_fg2:.2f} decreased by {(1-SNR_fg2/SNR_nofg)*100:.2f} %")
     
-    def plot_qcl_stat(self):
+    def plot_qcl_stat(self,save=False):
         fname = '../Data/paper/recQCL.pkl'
         if os.path.exists(fname):
             data = pl.load(open(fname,'rb'))
@@ -312,19 +316,21 @@ class recStat:
         
         stat = data['stat']
         plt.figure(figsize=(8,7))
-        plt.loglog(data['fid'],label='Fiducial',c='grey',lw=2)
-        plt.loglog(data['mcn0'],label='MCN0',c='r')
-        plt.loglog(data['mcn1'],label='MCN1',c='g')
-        plt.loglog(data['mf'],label='Mean Field',c='b')
-        plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
+        plt.loglog(data['fid'],label='$Fiducial$',c='grey',lw=2)
+        plt.loglog(data['mcn0'],label='$N_L^{(0)}$',c='r')
+        plt.loglog(data['mcn1'],label='$N_L^{(1)}$',c='g')
+        plt.loglog(data['mf'],label='$C_L^{MF}$',c='b')
+        plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='$Reconstructed$')
         plt.xlim(2,600)
         plt.legend(ncol=2, fontsize=20)
-        plt.xlabel('L',fontsize=20)
-        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=20)
+        plt.xlabel('$L$',fontsize=25)
+        plt.ylabel('$L^2 (L + 1)^2 C_L^{\phi\phi}$',fontsize=25)
         plt.xticks(fontsize=20)
         plt.yticks(fontsize=20)
+        if save:
+            plt.savefig('plots/recQCL.pdf', bbox_inches='tight',dpi=300)
     
-    def plot_bin_corr_comp(self,which=1):
+    def plot_bin_corr_comp(self,which=1,save=False):
         fname = f'../Data/paper/bin_corr.pkl'
         if os.path.exists(fname):
             data = pl.load(open(fname,'rb'))
@@ -350,11 +356,13 @@ class recStat:
         g1 = sns.heatmap(data[which]['mcn0'],cmap="coolwarm",cbar=False,ax=ax1)
         g1.set_ylabel('')
         g1.set_xlabel('')
-        g1.set_title('MCN0')
+        g1.set_title('$N_L^{(0),MC}$')
         g2 = sns.heatmap(data[which]['rdn0'],cmap="coolwarm",ax=ax2, cbar_ax=axcb)
         g2.set_ylabel('')
         g2.set_xlabel('')
         g2.set_yticks([])
-        g2.set_title('RDN0')
+        g2.set_title('$N_L^{(0),RD}$')
+        if save:
+            plt.savefig(f'plots/recCor{which}.pdf', bbox_inches='tight',dpi=300)
  
         
