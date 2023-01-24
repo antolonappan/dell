@@ -47,8 +47,11 @@ class simStat:
     def __init__(self,sim_fg1=None,sim_fg2=None,fg1='s0d0',fg2='s1d1'):
         self.sim_fg1 = sim_fg1
         self.sim_fg2 = sim_fg2
-        assert self.sim_fg1.lmax == self.sim_fg2.lmax
-        self.lmax = self.sim_fg1.lmax
+        if (self.sim_fg1 == self.sim_fg2 == None):
+            pass
+        else:
+            assert self.sim_fg1.lmax == self.sim_fg2.lmax
+            self.lmax = self.sim_fg1.lmax
         self.fg1 = fg1
         self.fg2 = fg2
     
