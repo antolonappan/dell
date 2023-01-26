@@ -6,6 +6,7 @@
 [![wakatime](https://wakatime.com/badge/github/antolonappan/dell.svg)](https://wakatime.com/badge/github/antolonappan/dell)
 [![GitHub pull-requests](https://img.shields.io/github/issues-pr/antolonappan/dell.svg)](https://GitHub.com/antolonappan/dell/pull/)
 [![Gitter](https://badges.gitter.im/LBdell/community.svg)](https://gitter.im/LBdell/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Copilot](https://img.shields.io/badge/GitHub-Copilot-critical)](https://github.com/features/copilot)
 
 
 
