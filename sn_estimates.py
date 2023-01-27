@@ -11,7 +11,7 @@ lmax = 1000
 fsky = 0.36 
 
 ## NOISES ##
-dat = np.loadtxt('./cl_n0.txt')
+dat = np.loadtxt('../Data/cl_n0.txt')
 ell = np.arange(len(dat))[2:lmax+1]
 dl = 0.25*(ell*(ell+1))**2
 MCN0_withoutFG = dat[:,1][2:lmax+1]
@@ -19,7 +19,7 @@ MCN0_withFG = dat[:,2][2:lmax+1]
 
 ## 'old' estimate of the noise: Lensing noise level: 3uK-arcmin white noise, 
 ## 30 arcmin FWHM gaussian beam, fullsky ##
-n_kk = np.loadtxt('./nlkk.dat', usecols = [1])[2:lmax+1]
+n_kk = np.loadtxt('../Data/nlkk.dat', usecols = [1])[2:lmax+1]
 noise_nofg = (dl*MCN0_withoutFG)#[2:lmax+1]
 noise_fg = (dl*MCN0_withFG)#[2:lmax+1]
 noises = [n_kk, noise_nofg, noise_fg]
@@ -27,10 +27,10 @@ noises = [n_kk, noise_nofg, noise_fg]
 n_gg = 2.8e-9/nbins
 
 ## DATA READING ##
-filename = 'lite_euclid_camb_bins_step_nl5_lmax1000_ScalarCovCls.txt'
+filename = '../Data/lite_euclid_camb_bins_step_nl5_lmax1000_ScalarCovCls.txt'
 
 ## Power spectra: total survey##
-filename_tot = 'lite_euclid_camb_tot_nl5_lmax1000_ScalarCovCls.txt'
+filename_tot = '../Data/lite_euclid_camb_tot_nl5_lmax1000_ScalarCovCls.txt'
 cl_x_tot = np.loadtxt(filename_tot, usecols = [12]
             )*np.pi/np.sqrt(ell*(ell+1))         
 cl_p_tot = np.loadtxt(filename_tot, dtype = float, unpack = True, 
