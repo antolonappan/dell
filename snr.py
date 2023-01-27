@@ -20,7 +20,7 @@ class SNR:
 
         self.n_gg = 2.8e-9/nbins
 
-    def plot(self):
+    def snr_tot_survey(self):
         filename_tot = '../Data/lite_euclid_camb_tot_nl5_lmax1000_ScalarCovCls.txt'
         cl_x_tot = np.loadtxt(filename_tot, usecols = [12]
                             )*np.pi/np.sqrt(self.ell*(self.ell+1))         
@@ -29,21 +29,15 @@ class SNR:
         cl_g_tot = np.loadtxt(filename_tot, dtype = float,
                     unpack = True, usecols = [16])*2*np.pi/(self.ell*(self.ell+1))
 
-        ## S/N from total survey ##
         sn_tot_survey = (self.fsky*(2*self.ell+1)*(cl_x_tot)**2)/((cl_x_tot)**2 + (cl_g_tot + 
                         self.n_gg*self.nbins)*(cl_p_tot+self.MCN0))
+        return sn_tot_survey
 
-        ## PLOT ##
-        fig, ax = plt.subplots()
-        ax.plot(self.ell, sn_tot_survey, lw = 1.8,)
-        print('S/N total case:'+ f'= {np.sqrt(sn_tot_survey.sum()):.1f}')
-        ax.set_xscale('log', base = 10)
-        ax.set_xlim(2,1000) 
-        ax.set_xlabel('$\ell$')    
-        ax.set_ylabel('$(S/N)^2$') 
-        ax.set_ylim(0,16)
     
-    def tomo(self):
+    def snr_total(self):
+        return np.sqrt(self.snr_tot_survey().sum())
+    
+    def snr_tomo_survey(self):
         filename = '../Data/lite_euclid_camb_bins_step_nl5_lmax1000_ScalarCovCls.txt'
         name_x = ['PxW{}'.format(i) for i in range(1,self.nbins+1)]
         name_a = ['W{}'.format(i)+'xW{}'.format(i) for i in range(1,self.nbins+1)]
@@ -84,7 +78,10 @@ class SNR:
         for i in range(len(self.ell)):
             sn2[i] = np.asarray(cl_x)[:, i]@(np.linalg.inv(cov_tot[ :, : ,i])
                                                 )@np.asarray(cl_x)[:, i]  
-        print('S/N tomographic case:', f'= {np.sqrt(sn2.sum()):.1f}')
+        return sn2
+
+    def snr_tomo(self):
+        return np.sqrt(self.snr_tomo_survey().sum())
 
 
 
