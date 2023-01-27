@@ -16,18 +16,18 @@ class SNR:
         self.ell = np.arange(2,self.lmax+1)
         self.Lfac =  (self.ell*(self.ell+1))/(2*np.pi) #rec.Lfac[2:self.lmax+1]
         MCN0 = (rec.MCN0()/rec.response_mean()**2)
-        self.MCN0 = MCN0[2:self.lmax+1] * self.Lfac
+        self.MCN0 = MCN0[2:self.lmax+1] #* self.Lfac
 
         self.n_gg = 2.8e-9/nbins
 
     def snr_tot_survey(self):
         filename_tot = '../Data/lite_euclid_camb_tot_nl5_lmax1000_ScalarCovCls.txt'
         cl_x_tot = np.loadtxt(filename_tot, usecols = [12]
-                            )/np.sqrt(self.ell*(self.ell+1))/dl         
+                            )/np.sqrt(self.ell*(self.ell+1))/self.Lfac         
         cl_p_tot = np.loadtxt(filename_tot, dtype = float, unpack = True, 
-                            usecols = [11])/(self.ell*(self.ell+1))/dl
+                            usecols = [11])/(self.ell*(self.ell+1))/self.Lfac
         cl_g_tot = np.loadtxt(filename_tot, dtype = float,
-                    unpack = True, usecols = [16])/dl
+                    unpack = True, usecols = [16])/self.Lfac
 
         sn_tot_survey = (self.fsky*(2*self.ell+1)*(cl_x_tot)**2)/((cl_x_tot)**2 + (cl_g_tot + 
                         self.n_gg*self.nbins)*(cl_p_tot+self.MCN0))
@@ -48,10 +48,10 @@ class SNR:
             name_gigj.append('W'+str(index[i][0])+'xW'+str(index[i][1]))
             
         data = pd.read_csv(filename, delim_whitespace=True, index_col=0)
-        cl_x = (np.asarray(data[name_x].transpose()))/np.sqrt(self.ell*(self.ell+1))/dl
-        cl_g = np.asarray(data[name_a].transpose())/dl
-        cl_p = np.asarray(data['PxP'])/(self.ell*(self.ell+1))/dl
-        cl_gigj = np.asarray(data[name_gigj].transpose())/dl
+        cl_x = (np.asarray(data[name_x].transpose()))/np.sqrt(self.ell*(self.ell+1))/self.Lfac
+        cl_g = np.asarray(data[name_a].transpose())/self.Lfac
+        cl_p = np.asarray(data['PxP'])/(self.ell*(self.ell+1))/self.Lfac
+        cl_gigj = np.asarray(data[name_gigj].transpose())/self.Lfac
 
         ## Covariance matrix : tomographic case (ten bins) ##
         cov_tot = np.zeros((self.nbins, self.nbins, len(self.ell)))
@@ -61,8 +61,7 @@ class SNR:
                     cl_gigj = np.asarray(data['W'+str(i+1)+'xW'+str(j+1)][0:self.lmax
                             ].transpose())*((2*np.pi/(self.ell*(self.ell+1))))
                     cov_tot[ i, j ,:] = (1/((2*self.ell+1)*self.fsky))*((cl_x[i]*cl_x[j])
-                    +(cl_gigj)*(cl_p + self.MCN0))
-                    
+
                     if (np.isnan(cl_x.any()) == True):
                         print('error: Nan')
                 else: 
