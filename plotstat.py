@@ -366,3 +366,32 @@ class recStat:
             plt.savefig(f'plots/recCor{which}.pdf', bbox_inches='tight',dpi=300)
  
         
+class snrStat:
+    def __init__(self,fg0=None,fg1=None,fg2=None):
+        self.fg0 = fg0
+        self.fg1 = fg1
+        self.fg2 = fg2
+
+    def table_total_snr(self):
+        print('SNR total')
+        print('NOFG :',self.fg0.snr_total())
+        print('s0d0 :',self.fg1.snr_total())
+        print('s1d1 :',self.fg2.snr_total())
+    
+    def table_tomo_snr(self):
+        print('SNR tomo')
+        print('NOFG :',self.fg0.snr_tomo())
+        print('s0d0 :',self.fg1.snr_tomo())
+        print('s1d1 :',self.fg2.snr_tomo())
+
+    def plot_total_survey(self,save=False):
+        plt.plot(self.fg0.ell,self.fg0.snr_tot_survey(),label='NOFG')
+        plt.plot(self.fg1.ell,self.fg1.snr_tot_survey(),label='s0d0')
+        plt.plot(self.fg2.ell,self.fg2.snr_tot_survey(),label='s1d1')
+        plt.legend()
+
+    def plot_tomo_survey(self,save=False):
+        plt.plot(self.fg0.ell,self.fg0.snr_tomo_survey(),label='NOFG')
+        plt.plot(self.fg1.ell,self.fg1.snr_tomo_survey(),label='s0d0')
+        plt.plot(self.fg2.ell,self.fg2.snr_tomo_survey(),label='s1d1')
+        plt.legend()
