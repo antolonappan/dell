@@ -297,6 +297,45 @@ class recStat:
         print(f"SNR FG1: {SNR_fg1:.2f} decreased by {(1-SNR_fg1/SNR_nofg)*100:.2f} %")
         print(f"SNR FG2: {SNR_fg2:.2f} decreased by {(1-SNR_fg2/SNR_nofg)*100:.2f} %")
     
+    def plot_SNR_impact(self,save=False):
+        """
+        Difference in SNR between the foreground and no foreground case
+        """
+        fname = '../Data/paper/snr.pkl'
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('SNR Loaded from file')
+        else:
+            data = {}
+            rec_nofg = self.rec_nofg
+            rec_fg1 = self.rec_fg1
+            rec_fg2 = self.rec_fg2
+            data['NOFG-SNR'] = rec_nofg.SNR_phi(rdn0=True)
+            data['fg1-SNR'] = rec_fg1.SNR_phi(rdn0=True)
+            data['fg2-SNR'] = rec_fg2.SNR_phi(rdn0=True)
+            pl.dump(data,open(fname,'wb'))
+            print('SNR Saved to file')
+        
+        SNR_nofg =  data['NOFG-SNR']
+        SNR_fg1 = data['fg1-SNR']
+        SNR_fg2 = data['fg2-SNR']
+        cases = ['No FG', 's0d0', 's1d1']
+        snr = [SNR_nofg, SNR_fg1, SNR_fg2]
+ 
+        plt.figure(figsize=(6, 8))
+        plot = plt.bar(cases, snr)
+        for value in plot:
+            height = value.get_height()
+            plt.text(value.get_x() + value.get_width()/2.,
+                    1*height,f"{height:.2f}", ha='center', va='bottom', fontsize=25)
+        plt.xlabel(" ")
+        plt.ylabel("SNR($\sigma$)")
+        plt.ylim(35,None)
+        plt.axhline(y=40, color='r', linestyle='--',label='Planck 2018(MV)')
+        plt.legend() 
+        if save:
+            plt.savefig('plots/SNR_impact.pdf', bbox_inches='tight',dpi=300)   
+    
     def plot_qcl_stat(self,save=False):
         fname = '../Data/paper/recQCL.pkl'
         if os.path.exists(fname):
