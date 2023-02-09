@@ -324,10 +324,16 @@ class recStat:
  
         plt.figure(figsize=(6, 8))
         plot = plt.bar(cases, snr)
-        for value in plot:
+        for i,value in enumerate(plot):
             height = value.get_height()
             plt.text(value.get_x() + value.get_width()/2.,
-                    1*height,f"{height:.2f}", ha='center', va='bottom', fontsize=25)
+                    1*height,f"${height:.2f}$", ha='center', va='bottom', fontsize=25)
+            if i==0:
+                pass
+            else:
+                plt.text(value.get_x() + value.get_width()/2.,
+                    37,f"$-{(1-snr[i]/snr[0])*100:.2f}\%$", ha='center', va='bottom', fontsize=22)
+        
         plt.xlabel(" ")
         plt.ylabel("SNR($\sigma$)")
         plt.ylim(35,None)
