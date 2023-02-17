@@ -29,11 +29,7 @@ class SNR:
                             usecols = [11])/(self.ell*(self.ell+1))/self.Lfac
         cl_g_tot = np.loadtxt(filename_tot, dtype = float,
                     unpack = True, usecols = [16])/self.Lfac
-        cl_tt = np.loadtxt(filename_tot, dtype = float,
-                    unpack = True, usecols = [1])/self.Lfac
-        cl_tp = np.loadtxt(filename_tot, dtype = float,
-                    unpack = True, usecols = [3])/np.sqrt(self.ell*(self.ell+1))/self.Lfac 
-
+        
         sn_tot_survey = (self.fsky*(2*self.ell+1)*(cl_x_tot)**2)/((cl_x_tot)**2 + (cl_g_tot + 
                         self.n_gg*self.nbins)*(cl_p_tot+self.MCN0))
         
