@@ -8,10 +8,11 @@ from quest import Reconstruction
 
 
 class SNR:
-    def __init__(self,rec_ini,nbins=10,lmax=1000,fsky=0.36):
+    def __init__(self,rec_ini,nbins=10,lmax=1000,fsky=0.36, fsky_iswphi = 0.80):
         self.nbins = nbins
         self.lmax = lmax
         self.fsky = fsky
+        self.fsky_iswphi = fsky_iswphi
         rec = Reconstruction.from_ini(rec_ini)
         self.ell = np.arange(2,self.lmax+1)
         self.Lfac =  (self.ell*(self.ell+1))/(2*np.pi)
@@ -28,14 +29,35 @@ class SNR:
                             usecols = [11])/(self.ell*(self.ell+1))/self.Lfac
         cl_g_tot = np.loadtxt(filename_tot, dtype = float,
                     unpack = True, usecols = [16])/self.Lfac
+        cl_tt = np.loadtxt(filename_tot, dtype = float,
+                    unpack = True, usecols = [1])/self.Lfac
+        cl_tp = np.loadtxt(filename_tot, dtype = float,
+                    unpack = True, usecols = [3])/np.sqrt(self.ell*(self.ell+1))/self.Lfac 
 
         sn_tot_survey = (self.fsky*(2*self.ell+1)*(cl_x_tot)**2)/((cl_x_tot)**2 + (cl_g_tot + 
                         self.n_gg*self.nbins)*(cl_p_tot+self.MCN0))
+        
         return sn_tot_survey
-
     
     def snr_total(self):
         return np.sqrt(self.snr_tot_survey().sum())
+    
+    ## snr ISWx lensing convergence #
+    def sn2r_iswphi(self):
+        filename_tot = '../Data/lite_euclid_camb_tot_nl5_lmax1000_ScalarCovCls.txt'   
+        cl_p_tot = np.loadtxt(filename_tot, dtype = float, unpack = True, 
+                            usecols = [11])/(self.ell*(self.ell+1))/self.Lfac
+        cl_tt = np.loadtxt(filename_tot, dtype = float,
+                    unpack = True, usecols = [1])/self.Lfac
+        cl_tp = np.loadtxt(filename_tot, dtype = float,
+                    unpack = True, usecols = [3])/np.sqrt(self.ell*(self.ell+1))/self.Lfac 
+        sn2_iswphi = (self.fsky_iswphi*(2*self.ell+1)*(cl_tp)**2)/((cl_tp)**2 + cl_tt*(cl_p_tot + self.MCN0))
+        
+        return sn2_iswphi
+    
+    def snr_iswphi(self):
+        return np.sqrt(self.sn2r_iswphi().sum())
+    
     
     def snr_tomo_survey(self):
         filename = '../Data/lite_euclid_camb_bins_step_nl5_lmax1000_ScalarCovCls.txt'
