@@ -8,7 +8,7 @@ from quest import Reconstruction
 
 
 class SNR:
-    def __init__(self,rec_ini,nbins=10,lmax=1000,fsky=0.36, fsky_iswphi = 0.80):
+    def __init__(self,rec_ini,nbins=10,lmax=1000,fsky=0.36,fsky_iswphi=0.80):
         self.nbins = nbins
         self.lmax = lmax
         self.fsky = fsky

@@ -440,3 +440,8 @@ class snrStat:
         plt.plot(self.fg1.ell,self.fg1.snr_tomo_survey(),label='s0d0')
         plt.plot(self.fg2.ell,self.fg2.snr_tomo_survey(),label='s1d1')
         plt.legend()
+    def table_isw_snr(self):
+        print('SNR ISW')
+        print('NOFG :',self.fg0.snr_iswphi())
+        print('s0d0 :',self.fg1.snr_iswphi())
+        print('s1d1 :',self.fg2.snr_iswphi())
