@@ -100,10 +100,3 @@ class SNR:
 
     def snr_tomo(self):
         return np.sqrt(self.snr_tomo_survey().sum())
-
-
-
-        
-    
-
-

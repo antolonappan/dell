@@ -49,7 +49,7 @@ class simStat:
         if (self.sim_fg1 == self.sim_fg2 == None):
             pass
         else:
-            assert self.sim_fg1.lmax == self.sim_fg2.lmax
+            assert self.sim_fg1.lmax == self.sim_fg2.lmax 
             self.lmax = self.sim_fg1.lmax
         self.fg1 = fg1
         self.fg2 = fg2

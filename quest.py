@@ -174,7 +174,7 @@ class Reconstruction:
         ocl = self.__observed_spectra__
         Ag, Ac = cs.norm_quad.qeb('lens',self.Lmax,self.rlmin,
                                   self.rlmax,self.cl_len[1,:],
-                                  ocl[1,:],ocl[2,:])
+                                  ocl[1,:],ocl[2,:])  
         del Ac
         return Ag
 
@@ -226,8 +226,7 @@ class Reconstruction:
             glm2 *= self.norm[:,None]
             
             glm = glm1 + glm2
-            n0cl = cs.utils.alm2cl(self.Lmax,glm)/(2*self.fsky)
-
+            n0cl = cs.utils.alm2cl(self.Lmax,glm)/(2*self.fsky) # type: ignore 
             pl.dump(n0cl,open(fname,'wb'))
             return n0cl
 
@@ -301,9 +300,9 @@ class Reconstruction:
                 glm3 *= self.norm[:,None]
                 glm4 *= self.norm[:,None]
 
-                first_four = cs.utils.alm2cl(self.Lmax, glm1 + glm2)/(self.fsky)
-                second_last = cs.utils.alm2cl(self.Lmax, glm3)/(self.fsky)
-                last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(self.fsky)
+                first_four = cs.utils.alm2cl(self.Lmax, glm1 + glm2)/(self.fsky) #type: ignore
+                second_last = cs.utils.alm2cl(self.Lmax, glm3)/(self.fsky) #type: ignore
+                last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(self.fsky) #type: ignore
 
                 mean_rdn0.append(first_four - second_last - last)
             

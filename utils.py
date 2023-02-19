@@ -35,8 +35,7 @@ def camb_clfile(fname, lmax=None):
 
     cls = {k : np.zeros(lmax + 1, dtype=float) for k in keys}
 
-    idc = np.where(ell <= lmax) if lmax is not None else np.arange(len(ell), dtype=int)
-
+    idc = np.where(ell <= lmax) if lmax is not None else np.arange(len(ell), dtype=int) # type: ignore
     w = lambda ell :ell * (ell + 1) / (2. * np.pi)
     wpp = lambda ell : ell ** 2 * (ell + 1) ** 2 / (2. * np.pi)
     wptpe = lambda ell :np.sqrt(ell.astype(float) ** 3 * (ell + 1.) ** 3) / (2. * np.pi) 

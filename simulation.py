@@ -56,7 +56,7 @@ class SimExperimentFG:
         self.table = table[(table.frequency>Fl) & (table.frequency<Fh)]
         self.dnside = dnside
         self.Tcmb  = 2.726e6
-        self.cl_len = cmb.read_camb_cls(len_cl_file,ftype='lens',output='array')[:,:self.lmax+1]
+        self.cl_len = cmb.read_camb_cls(len_cl_file,ftype='lens',output='array')[:,:self.lmax+1]  # type: ignore
         self.noFG = noFG
         self.nsim = nsim
 
@@ -95,8 +95,8 @@ class SimExperimentFG:
         fg_str = mc['fg_str']
         table = mc['table']
         len_cl_file = mc['len_cl_file']
-        Fl = float(mc['Fl'])
-        Fh = float(mc['Fh'])
+        Fl = int(mc['Fl'])
+        Fh = int(mc['Fh'])
         noFG = bool(mc['noFG'])
         nsim = int(mc['nsim'])
         return cls(infolder,outfolder,dnside,fg_dir,fg_str,table,len_cl_file,nsim,Fl,Fh,noFG,verbose)
@@ -115,14 +115,14 @@ class SimExperimentFG:
         Get the CMB map of the given simulation
         """
         fname = os.path.join(self.infolder,f"cmb_sims_{idx:04d}.fits")
-        return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside)
+        return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside) # type: ignore
 
     def get_fg(self,v):
         """
         Get the foreground map
         """
         fname = os.path.join(self.fg_dir,f"{self.fg_str}_{int(v)}.fits")
-        return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside)
+        return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside) # type: ignore
 
     def convolved_cmb_fg_vect(self,idx):
         """
@@ -239,8 +239,8 @@ class SimExperimentFG:
             return cmb_final,noise_final,weights
 
         else:
-            cmb_final =  hp.read_alm(mapfile,(1,2,3))
-            noise_final = hp.read_alm(noisefile,(1,2,3))
+            cmb_final =  hp.read_alm(mapfile,(1,2,3)) # type: ignore
+            noise_final = hp.read_alm(noisefile,(1,2,3)) # type: ignore
             weights = pl.load(open(weightfile,"rb"))
             return cmb_final,noise_final,weights
 
@@ -275,14 +275,14 @@ class SimExperimentFG:
         To read the cleaned cmb map
         """
 
-        alms = hp.read_alm(os.path.join(self.mapfolder,f"sims_{idx:04d}.fits"),(1,2,3))
+        alms = hp.read_alm(os.path.join(self.mapfolder,f"sims_{idx:04d}.fits"),(1,2,3)) # type: ignore
         return alms
     
     def get_noise_cmb(self,idx):
         """
         To read the noise cmb map
         """
-        alms = hp.read_alm(os.path.join(self.noisefolder,f"sims_{idx:04d}.fits"),(1,2,3))
+        alms = hp.read_alm(os.path.join(self.noisefolder,f"sims_{idx:04d}.fits"),(1,2,3)) # type: ignore
         return alms
 
     def get_weights_cmb(self,idx):
@@ -296,8 +296,8 @@ class SimExperimentFG:
         cmb = self.get_cleaned_cmb(idx)
         noise = self.get_noise_cmb(idx)
         clee = hp.alm2cl(cmb[1])
-        clbb = hp.alm2cl(cmb[2])
-        clbb_noise = hp.alm2cl(noise[2])
+        clbb = hp.alm2cl(cmb[2]) # type: ignore
+        clbb_noise = hp.alm2cl(noise[2]) # type: ignore
         clee_noise = hp.alm2cl(noise[1])
         plt.figure(figsize=(8,8))
         plt.loglog(clbb,label="BB")
@@ -321,7 +321,7 @@ class SimExperimentFG:
             for i in tqdm(range(n),desc="Calculating Cl",unit='sim'):
                 cmb = self.get_cleaned_cmb(i)
                 clee[i,:] = hp.alm2cl(cmb[1])
-                clbb[i,:] = hp.alm2cl(cmb[2])
+                clbb[i,:] = hp.alm2cl(cmb[2]) # type: ignore
             stat = (np.mean(clee,axis=0),np.std(clee,axis=0),np.mean(clbb,axis=0),np.std(clbb,axis=0))
             pl.dump(stat,open(fname,"wb"))
             return stat
@@ -332,9 +332,9 @@ class SimExperimentFG:
         """
         stat = self.cl_stat(n)
         plt.figure(figsize=(8,8))
-        plt.loglog(stat[0],label="$\\frac{1}{b_\ell^2}\\left(C_\ell^{EE} + C_\ell^{FG\;res} + N_\ell\\right)$",c='r',ls='--',lw=2)
+        plt.loglog(stat[0],label="$\\frac{1}{b_\ell^2}\\left(C_\ell^{EE} + C_\ell^{FG\;res} + N_\ell\\right)$",c='r',ls='--',lw=2) # type: ignore
         plt.fill_between(np.arange(self.lmax+1),stat[0]-(stat[1]),stat[0]+stat[1],color='r',alpha=0.5)
-        plt.loglog(stat[2],label="$\\frac{1}{b_\ell^2}\\left(C_\ell^{BB} + C_\ell^{FG\;res} + N_\ell\\right)$",c='b',ls='--',lw=2)
+        plt.loglog(stat[2],label="$\\frac{1}{b_\ell^2}\\left(C_\ell^{BB} + C_\ell^{FG\;res} + N_\ell\\right)$",c='b',ls='--',lw=2) # type: ignore
         plt.fill_between(np.arange(self.lmax+1),stat[2]-stat[3],stat[2]+stat[3],color='b',alpha=0.5)
         plt.loglog(self.cl_len[1,:]*self.Tcmb**2 ,c='k',ls='--',lw=2,label="EE")
         plt.loglog(self.cl_len[2,:]*self.Tcmb**2 ,c='k',ls='-.',lw=2,label="BB")
@@ -356,7 +356,7 @@ class SimExperimentFG:
             noise_alm = self.get_noise_cmb(mpi.rank)
             nlt = hp.alm2cl(noise_alm[0])
             nle = hp.alm2cl(noise_alm[1])
-            nlb = hp.alm2cl(noise_alm[2])
+            nlb = hp.alm2cl(noise_alm[2]) # type: ignore
             
             if mpi.rank == 0:
                 total_nlt = np.zeros(nlt.shape)
@@ -372,9 +372,9 @@ class SimExperimentFG:
             mpi.com.Reduce(nlb,total_nlb, op=mpi.mpi.SUM,root=0)
 
             if mpi.rank == 0:
-                mean_nlt = total_nlt/mpi.size
-                mean_nle = total_nle/mpi.size
-                mean_nlb = total_nlb/mpi.size
+                mean_nlt = total_nlt/mpi.size # type: ignore
+                mean_nle = total_nle/mpi.size # type: ignore
+                mean_nlb = total_nlb/mpi.size # type: ignore
                 pl.dump([mean_nlt,mean_nle,mean_nlb],open(fname,'wb'))
 
             mpi.barrier()
@@ -445,9 +445,9 @@ class SimExperimentFG:
             mpi.com.Reduce(bb,total_bb, op=mpi.mpi.SUM,root=0)
 
             if mpi.rank == 0:
-                mean_bt = total_bt/mpi.size
-                mean_be = total_be/mpi.size
-                mean_bb = total_bb/mpi.size
+                mean_bt = total_bt/mpi.size # type: ignore
+                mean_be = total_be/mpi.size # type: ignore
+                mean_bb = total_bb/mpi.size # type: ignore
                 pl.dump([mean_bt,mean_be,mean_bb],open(fname,'wb'))
 
             mpi.barrier()
@@ -503,9 +503,9 @@ class SimExperimentFG:
             mpi.com.Reduce(fb,total_fb, op=mpi.mpi.SUM,root=0)
 
             if mpi.rank == 0:
-                mean_ft = total_ft/mpi.size
-                mean_fe = total_fe/mpi.size
-                mean_fb = total_fb/mpi.size
+                mean_ft = total_ft/mpi.size # type: ignore
+                mean_fe = total_fe/mpi.size # type: ignore
+                mean_fb = total_fb/mpi.size # type: ignore
                 pl.dump([mean_ft,mean_fe,mean_fb],open(fname,'wb'))
 
             mpi.barrier()
@@ -526,7 +526,7 @@ class SimExperimentFG:
             cmb_alm = self.get_cleaned_cmb(mpi.rank)
             tt = hp.alm2cl(cmb_alm[0])
             ee = hp.alm2cl(cmb_alm[1])
-            bb = hp.alm2cl(cmb_alm[2])
+            bb = hp.alm2cl(cmb_alm[2]) # type: ignore
             
             if mpi.rank == 0:
                 total_tt = np.zeros(tt.shape)
@@ -542,9 +542,9 @@ class SimExperimentFG:
             mpi.com.Reduce(bb,total_bb, op=mpi.mpi.SUM,root=0)
 
             if mpi.rank == 0:
-                mean_tt = total_tt/mpi.size
-                mean_ee = total_ee/mpi.size
-                mean_bb = total_bb/mpi.size
+                mean_tt = total_tt/mpi.size # type: ignore
+                mean_ee = total_ee/mpi.size # type: ignore
+                mean_bb = total_bb/mpi.size # type: ignore
                 pl.dump([mean_tt,mean_ee,mean_bb],open(fname,'wb'))
 
             mpi.barrier()
@@ -641,7 +641,7 @@ class CMBLensed:
     def get_kappa(self,idx):
         """
         generate deflection field
-        sqrt(L(L+1)) * \phi_{LM}
+        sqrt(L(L+1)) * phi_{LM}
         """
         der = np.sqrt(np.arange(self.lmax + 1, dtype=float) * np.arange(1, self.lmax + 2))
         return hp.almxfl(self.get_phi(idx), der)
@@ -657,7 +657,7 @@ class CMBLensed:
         fname = os.path.join(self.cmb_dir,f"cmb_sims_{idx:04d}.fits")
         if os.path.isfile(fname):
             self.vprint(f"CMB fields from cache: {idx}")
-            return hp.read_map(fname,(0,1,2),dtype=np.float64)
+            return hp.read_map(fname,(0,1,2),dtype=np.float64) # type: ignore 
         else:
             dlm = self.get_kappa(idx)
             Red, Imd = hp.alm2map_spin([dlm, np.zeros_like(dlm)], self.nside, 1, hp.Alm.getlmax(dlm.size))
@@ -720,7 +720,7 @@ class ForeGround:
         del (maps,alms_n)
         
         fname = os.path.join(self.fg_dir,f"{self.fg_str}_{int(v)}.fits")
-        maps = hp.read_map(fname,(0,1,2))
+        maps = hp.read_map(fname,(0,1,2)) # type: ignore 
         alms_h = hp.map2alm(hp.ud_grade(maps,256))
         th = hp.alm2cl(alms_h[0])
         eh = hp.alm2cl(alms_h[1])
@@ -743,7 +743,7 @@ class ForeGround:
         sky = pysm3.Sky(nside=256, preset_strings=list(map(''.join, zip(*[iter(self.fg_str)]*2))))
         freq = self.lb_table.frequency.values
         for v in freq:
-            tn,to,en,eo,bn,bo = self.test_v(v,sky=sky)
+            tn,to,en,eo,bn,bo = self.test_v(v,sky=sky) # type: ignore
             T = np.allclose(tn,to,rtol=1e-3,atol=1e-3)
             E = np.allclose(en,eo,rtol=1e-3,atol=1e-3)
             B = np.allclose(bn,bo,rtol=1e-3,atol=1e-3)
