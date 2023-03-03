@@ -104,6 +104,12 @@ class Likelihood_CAMB:
         self.pars = camb.CAMBparams()
         self.pars.InitPower.set_params(As=2e-9, ns=0.965, r=0)
         self.pars.set_for_lmax(self.lmax, lens_potential_accuracy=0)
+    
+    @classmethod
+    def from_ini(cls, ini_file):
+        rec = Reconstruction.from_ini(ini_file)
+        lib = rec.filt_lib.sim_lib.outfolder
+        return cls(lib,rec)
 
     def theory_PP(self,theta):
         omch2,alens = theta
@@ -152,8 +158,8 @@ class Likelihood_CAMB:
         soln = minimize(nll, initial)
         return soln
         
-    def sampler(self, nwalkers=32, nsteps=1000):
-        fname = os.path.join(self.lib_dir,'samples.pkl' if nsteps==1000 else f'samples_{nsteps}.pkl')
+    def sampler(self, nwalkers=32, nsteps=500):
+        fname = os.path.join(self.lib_dir,'samples.pkl' if nsteps==500 else f'samples_{nsteps}.pkl')
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -164,3 +170,13 @@ class Likelihood_CAMB:
             samples = sampler.get_chain(discard=100, thin=15, flat=True)
             pl.dump(samples,open('samples.pkl','wb'))
         return samples
+    
+    def mcsamples(self,nsteps=5000):
+        return MCSamples(samples=self.sampler(nsteps=nsteps),names=['omch','alens'],labels=["\\Omega_{m}h^2","A_{lens}"])
+    
+    def plot_posterior(self,nsteps=500):
+        g = plots.get_subplot_plotter(width_inch=5)
+        g.triangle_plot([self.mcsamples(nsteps)], filled=True)
+    
+    def best_fit(self,nsteps=500,lim=1):
+        return (self.mcsamples(nsteps).getInlineLatex('alens',limit=lim), self.mcsamples(nsteps).getInlineLatex('omch',limit=lim))
