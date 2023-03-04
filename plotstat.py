@@ -123,7 +123,7 @@ class simStat:
         plt.figure(figsize=(16, 8))
         fig, (ax1, ax2)  = plt.subplots(1, 2,figsize=(16, 8))
 
-        ax1.loglog(data['fid_ee'] ,c='k',lw=2,label="Fiducial EE")
+        ax1.loglog(data['fid_ee'] ,c='k',lw=2,label="Signal EE")
         ax1.loglog(fg1_rnl_e ,label=f"{self.fg1}",c='r',lw=2,)
         ax1.loglog(fg2_rnl_e ,label=f"{self.fg2}",c='g',lw=2)
         ax1.legend(fontsize=20)
@@ -132,9 +132,9 @@ class simStat:
         ax1.set_xlim(2,600)
         ax1.set_ylim(1e-6,1e-1)
 
-        ax2.loglog(data['fid_bb'] ,c='k',lw=2,label="Fiducial BB")
-        ax2.loglog(fg1_rnl_b ,label=f"{self.fg1}",c='b',lw=2)
-        ax2.loglog(fg2_rnl_b ,label=f"{self.fg2}",c='magenta',lw=2)
+        ax2.loglog(data['fid_bb'] ,c='k',lw=2,label="Signal BB")
+        ax2.loglog(fg1_rnl_b ,label=f"{self.fg1}",c='r',lw=2)
+        ax2.loglog(fg2_rnl_b ,label=f"{self.fg2}",c='g',lw=2)
         ax2.legend(fontsize=20)
         ax2.set_xlabel("$\ell$",fontsize=25)
         ax2.set_ylim(1e-7,1e-2)
@@ -297,7 +297,7 @@ class recStat:
         print(f"SNR FG1: {SNR_fg1:.2f} decreased by {(1-SNR_fg1/SNR_nofg)*100:.2f} %")
         print(f"SNR FG2: {SNR_fg2:.2f} decreased by {(1-SNR_fg2/SNR_nofg)*100:.2f} %")
     
-    def plot_SNR_impact(self,save=False):
+    def plot_SNR_impact(self,save=False,color='gold'):
         """
         Difference in SNR between the foreground and no foreground case
         """
@@ -323,7 +323,7 @@ class recStat:
         snr = [SNR_nofg, SNR_fg1, SNR_fg2]
  
         plt.figure(figsize=(6, 8))
-        plot = plt.bar(cases, snr)
+        plot = plt.bar(cases, snr,color=color)
         for i,value in enumerate(plot):
             height = value.get_height()
             plt.text(value.get_x() + value.get_width()/2.,
@@ -337,7 +337,7 @@ class recStat:
         plt.xlabel(" ")
         plt.ylabel("SNR($\sigma$)")
         plt.ylim(35,None)
-        plt.axhline(y=40, color='r', linestyle='--',label='Planck 2018(MV)')
+        plt.axhline(y=40, color='r', linestyle='--',label='Planck 2018')
         plt.legend() 
         if save:
             plt.savefig('plots/SNR_impact.pdf', bbox_inches='tight',dpi=300)   
