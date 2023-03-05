@@ -340,7 +340,50 @@ class recStat:
         plt.axhline(y=40, color='r', linestyle='--',label='Planck 2018')
         plt.legend() 
         if save:
-            plt.savefig('plots/SNR_impact.pdf', bbox_inches='tight',dpi=300)   
+            plt.savefig('plots/SNR_impact.pdf', bbox_inches='tight',dpi=300)
+
+    def plot_SNR_impact_v2(self,save=False,color='gold'):
+        """
+        Difference in SNR between the foreground and no foreground case
+        """
+        fname = '../Data/paper/snr.pkl'
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('SNR Loaded from file')
+        else:
+            data = {}
+            rec_nofg = self.rec_nofg
+            rec_fg1 = self.rec_fg1
+            rec_fg2 = self.rec_fg2
+            data['NOFG-SNR'] = rec_nofg.SNR_phi(rdn0=True)
+            data['fg1-SNR'] = rec_fg1.SNR_phi(rdn0=True)
+            data['fg2-SNR'] = rec_fg2.SNR_phi(rdn0=True)
+            pl.dump(data,open(fname,'wb'))
+            print('SNR Saved to file')
+        
+        SNR_nofg =  data['NOFG-SNR']
+        SNR_fg1 = data['fg1-SNR']
+        SNR_fg2 = data['fg2-SNR']
+        cases = ['Planck(pol)','Planck(MV)','No FG', 's0d0', 's1d1']
+        pl_pol = 9
+        pl_mv = 40
+        pl_pol_npipe = pl_pol*.2+pl_pol
+        pl_mv_npipe = pl_mv*.2+pl_mv
+        snr = [pl_pol_npipe,pl_mv_npipe,SNR_nofg, SNR_fg1, SNR_fg2]
+        plt.figure(figsize=(8, 6))
+        
+        plot = plt.barh(cases[::-1],snr[::-1],color=color)
+        
+        for i,value in enumerate(plot):
+            width = value.get_width()
+            plt.text(width + 5, value.get_y()+.25,f"${width:.2f}$", ha='center', va='bottom', fontsize=25)
+
+        
+
+        plt.xlabel("SNR($\sigma$)") 
+        plt.xlim(0,60)
+        if save:
+            plt.savefig('plots/SNR_impact_v2.pdf', bbox_inches='tight',dpi=300)      
     
     def plot_qcl_stat(self,save=False):
         fname = '../Data/paper/recQCL.pkl'
