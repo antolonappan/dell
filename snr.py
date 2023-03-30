@@ -19,7 +19,7 @@ class SNR:
         MCN0 = (rec.MCN0()/rec.response_mean()**2)
         self.MCN0 = MCN0[2:self.lmax+1] 
 
-        self.n_gg = 2.8e-9/nbins
+        self.n_gg = (2.8e-9)*nbins
 
     def snr_tot_survey(self):
         filename_tot = '../Data/lite_euclid_camb_tot_nl5_lmax1000_ScalarCovCls.txt'
@@ -31,7 +31,7 @@ class SNR:
                     unpack = True, usecols = [16])/self.Lfac
         
         sn_tot_survey = (self.fsky*(2*self.ell+1)*(cl_x_tot)**2)/((cl_x_tot)**2 + (cl_g_tot + 
-                        self.n_gg*self.nbins)*(cl_p_tot+self.MCN0))
+                        self.n_gg/self.nbins)*(cl_p_tot+self.MCN0))
         
         return sn_tot_survey
     
