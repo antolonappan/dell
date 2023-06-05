@@ -39,7 +39,16 @@ if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['lines.dashed_pattern']=3, 1.5
 
 
+class Planck:
 
+    def __init__(self):
+        datadir = '../Data/planck/'
+        MV = np.loadtxt(datadir+'mv_nlkk.dat').T
+        self.MV = {'L':MV[0],'N':MV[1],'SN':MV[2]}
+        PP = np.loadtxt(datadir+'pp_nlkk.dat').T
+        self.PP = {'L':PP[0],'N':PP[1],'SN':PP[2]}
+        TT = np.loadtxt(datadir+'tt_nlkk.dat').T
+        self.TT = {'L':TT[0],'N':TT[1],'SN':TT[2]}
 
 class simStat:
     
