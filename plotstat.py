@@ -5,6 +5,7 @@ import os
 import seaborn as sns
 import pickle as pl
 import socket
+from tqdm import tqdm
 
 if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['text.usetex']=True
@@ -175,7 +176,7 @@ class recStat:
         self.fg1 = fg1
         self.fg2 = fg2
 
-    def plot_fg_impact(self,save=False):
+    def plot_fg_impact(self,save=False,planck=True,logy=False):
         """
         Plot the impact of foregrounds on the reconstruction
         """
@@ -224,6 +225,10 @@ class recStat:
         axs[0].semilogy(data['fg2-MCER']+(data['fidm']/100),label=f"{self.fg2}"+ " $C_L^{MC}$",ls=':',lw=3)
         axs[0].semilogy(data['NOFG-MF'],label='NOFG $C_L^{MF}$',c='y')
         axs[0].semilogy(data['fg2-MF'],label=f"{self.fg2}"+ " $C_L^{MF}$",c='g')
+        if planck:
+            axs[0].semilogy((Planck().MV['N'])[:len(self.rec_fg2.Lfac)],label='Planck(MV)')
+        if logy:
+            axs[0].semilogx()
         axs[0].legend(ncol=3, fontsize=16,frameon=False)
         axs[0].set_ylim(1e-9,1e-5)
         axs[0].set_ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} C_L^{\phi\phi}$',fontsize=25)
@@ -461,6 +466,23 @@ class recStat:
         g2.set_title('$N_L^{(0),RD}$')
         if save:
             plt.savefig(f'plots/recCor{which}.pdf', bbox_inches='tight',dpi=300)
+
+    
+    def plot_planck_comparsion(self,save=False):
+        p = Planck()
+        spectra = []
+        for i in tqdm(range(10)):
+            spectra.append(self.rec_fg2.get_qcl_wR(i,n1=True,rdn0=True))
+
+        spectra = np.array(spectra).mean(axis=0)
+        spectra[0] = 0
+        spectra[1] = 0
+        plt.loglog(spectra*self.rec_fg2.Lfac)
+        plt.loglog((p.PP['N'])[:len(self.rec_fg2.Lfac)])
+        plt.loglog(self.rec_fg2.MCN0()*self.rec_fg2.Lfac)
+
+
+
  
         
 class snrStat:
