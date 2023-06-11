@@ -18,7 +18,7 @@ cd /global/u2/l/lonappan/workspace/LBlens
 
 export ini=LB_FG0.ini
 
-#mpirun -np $SLURM_NTASKS python simulation.py $ini -maps 
+#mpirun -np $SLURM_NTASKS python simulation.py $ini -maps
 #mpirun -np $SLURM_NTASKS python simulation.py $ini -noise
 #mpirun -np $SLURM_NTASKS python filtering.py $ini -cinv
 #mpirun -np $SLURM_NTASKS python quest.py $ini -qlms

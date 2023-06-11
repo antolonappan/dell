@@ -688,7 +688,7 @@ class ForeGround:
 
     def __init__(self,fg_str='s1d1',nside=2048):
         self.lb_table = Surveys().get_table_dataframe('LITEBIRD_V1')
-        self.fg_dir = '/global/cscratch1/sd/lonappan/S4BIRD/FG'
+        self.fg_dir = '/pscratch/sd/l/lonappan/DELL/FG'
         self.fg_str = fg_str
         self.nside = nside
         os.makedirs(self.fg_dir,exist_ok=True)
