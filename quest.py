@@ -389,13 +389,14 @@ class Reconstruction:
         """
         if self.nsim <200:
             self.vprint("input phi is constant")
-            dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps_c/MASS"
+            dir_ = "/global/cfs/cdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps_c/MASS"
             fname = os.path.join(dir_,f"phi_sims.fits")
+            fnamet = os.path.join(self.in_dir,f"phi_sims_c.pkl")
         else:
             self.vprint("input phi is from variying")
-            dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
+            dir_ = "/global/cfs/cdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
             fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
-        fnamet = os.path.join(self.in_dir,f"phi_sims_{idx:04d}.pkl")
+            fnamet = os.path.join(self.in_dir,f"phi_sims_{idx:04d}.pkl")
         if os.path.isfile(fnamet):
             return pl.load(open(fnamet,'rb'))
         else:
@@ -664,46 +665,73 @@ class Reconstruction:
         """
         MPI job for the potential reconstruction.
         """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            phi = self.get_phi(i)
-        mpi.barrier()
+        job = np.arange(self.nsim)
+        if mpi.size > 1:
+            for i in job[mpi.rank::mpi.size]:
+                phi = self.get_phi(i)
+            mpi.barrier()
+        else:
+            for i in tqdm(job,desc='Phi reconstruction', unit='sim'):
+                phi = self.get_phi(i)
+                del phi
+        
     
     def job_MCN0(self):
         """
         MPI job for the potential reconstruction with different CMB fields.
         """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            phi = self.N0_sim(i)
-        mpi.barrier()
+        job = np.arange(self.nsim)
+        if mpi.size > 1:
+            for i in job[mpi.rank::mpi.size]:
+                phi = self.N0_sim(i)
+            mpi.barrier()
+        else:
+            for i in tqdm(job,desc='MCN0', unit='sim'):
+                phi = self.N0_sim(i)
+                del phi
+        
     
     def job_RDN0(self):
         """
         MPI job for the potential reconstruction with different CMB fields.
         """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            rdn0 = self.RDN0(i)
-        mpi.barrier()
+        job = np.arange(self.nsim)
+        if mpi.size > 1:
+            for i in job[mpi.rank::mpi.size]:
+                rdn0 = self.RDN0(i)
+            mpi.barrier()
+        else:
+            for i in tqdm(job,desc='RDN0', unit='sim'):
+                rdn0 = self.RDN0(i)
+                del rdn0
 
     def job_response(self):
         """
         MPI job for the response calculation.
         """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            Null = self.response(i)
-        mpi.barrier()
+        job = np.arange(self.nsim)
+        if mpi.size > 1:
+            for i in job[mpi.rank::mpi.size]:
+                Null = self.response(i)
+            mpi.barrier()
+        else:
+            for i in tqdm(job,desc='Response', unit='sim'):
+                Null = self.response(i)
+                del Null
     
     def job_input_phi(self):
         """
         MPI job for the input potential reconstruction.
         """
-        job = np.arange(mpi.size)
-        for i in job[mpi.rank::mpi.size]:
-            phi = self.get_input_phi_sim(i)
-        mpi.barrier()
+        job = np.arange(self.nsim)
+        if mpi.size > 1:
+            for i in job[mpi.rank::mpi.size]:
+                phi = self.get_input_phi_sim(i)
+            mpi.barrier()
+        else:
+            for i in tqdm(job,desc='Input Phi', unit='sim'):
+                phi = self.get_input_phi_sim(i)
+                del phi
 
 
 

@@ -8,6 +8,7 @@ import healpy as hp
 import curvedsky as cs
 from utils import cli
 from utils import ini_full
+from tqdm import tqdm
 
 from simulation import SimExperimentFG
 
@@ -179,13 +180,22 @@ class Filtering:
         E, B = self.cinv_EB(idx)
         pass
 
-    def run_job(self):
+    def run_job_mpi(self):
         """
         MPI job for filtering
         """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             eb = self.cinv_EB(i)
+
+    def run_job(self):
+        """
+        MPI job for filtering
+        """
+        jobs = np.arange(self.sim_lib.nsim)
+        for i in tqdm(jobs, desc='Cinv filtering', unit='sim'):
+            eb = self.cinv_EB(i)
+            del eb
 
 if __name__ == '__main__':
     import argparse

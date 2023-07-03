@@ -133,7 +133,7 @@ class SimExperimentFG:
             V = np.array(self.table.frequency)
             Beam = np.array(self.table.fwhm)
             maps = []
-            for v,b in tqdm(zip(V,Beam),desc="Making maps",unit='Freq'):
+            for v,b in tqdm(zip(V,Beam),desc="Making maps",unit='Freq',leave=True):
                 maps.append(hp.smoothing(self.get_cmb(idx) + self.get_fg(v), fwhm=np.radians(b/60)))
             pl.dump(maps,open(fname,'wb'))
         else:
@@ -180,7 +180,7 @@ class SimExperimentFG:
         
         return noise
 
-    def get_cmb_alms(self,idx,ret=0):
+    def get_cmb_alms(self,idx,ret=False,binwidth=10):
         """
         Harmonic ILC component seperated CMB alms
         """
@@ -193,7 +193,7 @@ class SimExperimentFG:
            (not os.path.isfile(weightfile)):
             instrument = INST(None,np.array(self.table.frequency))
             components = [CMB()]
-            bins = np.arange(1000) * 10
+            bins = np.arange(1000) * binwidth
             Beam = np.array(self.table.fwhm)
 
             noise = self.get_noise_map(idx)
@@ -204,7 +204,7 @@ class SimExperimentFG:
 
             map_alms = []
             noise_alms = []
-            for i in tqdm(range(len(Beam)),desc="Making alms",unit='Freq'):
+            for i in tqdm(range(len(Beam)),desc="Making alms",unit='Freq',leave=True):
                 alms_ = hp.map2alm(maps[i])
                 n_ = hp.map2alm(noise[i])
                 fl = hp.gauss_beam(np.radians(Beam[i]/60),lmax=self.lmax,pol=True).T
@@ -235,14 +235,21 @@ class SimExperimentFG:
             self.vprint("SIMULATION INFO: removing tmp files")
             os.remove(os.path.join(self.noisefolder,f"tmp_noise_{idx:04d}.pkl"))
             os.remove(os.path.join(self.mapfolder,f"tmp_cmb_{idx:04d}.pkl"))
-
-            return cmb_final,noise_final,weights
+            
+            if ret:
+                return cmb_final,noise_final,weights
+            else:
+                del (cmb_final,noise_final,weights)
+                return 0
 
         else:
-            cmb_final =  hp.read_alm(mapfile,(1,2,3)) # type: ignore
-            noise_final = hp.read_alm(noisefile,(1,2,3)) # type: ignore
-            weights = pl.load(open(weightfile,"rb"))
-            return cmb_final,noise_final,weights
+            if ret:
+                cmb_final =  hp.read_alm(mapfile,(1,2,3)) # type: ignore
+                noise_final = hp.read_alm(noisefile,(1,2,3)) # type: ignore
+                weights = pl.load(open(weightfile,"rb"))
+                return cmb_final,noise_final,weights
+            else:
+                return 0
 
     
         
@@ -262,13 +269,20 @@ class SimExperimentFG:
             start += n_m
         return res
 
-    def run_job(self):
+    def run_job_mpi(self):
         """
         MPI Job to run the component seperation
         """
-        jobs = np.arange(mpi.size)
+        jobs = np.arange(self.nsim)
         for i in jobs[mpi.rank::mpi.size]:
             Null = self.get_cmb_alms(i)
+            del Null
+
+    def run_job(self):
+        job = np.arange(self.nsim)
+        for i in tqdm(job,desc='Component Separation',unit='sim'):
+            Null = self.get_cmb_alms(i)
+            del Null
 
     def get_cleaned_cmb(self,idx):
         """
@@ -784,7 +798,7 @@ if __name__ == '__main__':
 
     if args.maps:
         sim = SimExperimentFG.from_ini(ini)
-        sim.run_job()
+        sim.run_job_mpi()
 
     if args.noise:
         sim = SimExperimentFG.from_ini(ini)
