@@ -365,7 +365,10 @@ class SimExperimentFG:
         """
         MPI Job to calculate the noise mean
         """
-        fname = os.path.join(self.outfolder,f"noise_mean_{mpi.size}.pkl")
+        if mpi.size>1:
+            fname = os.path.join(self.outfolder,f"noise_mean_{mpi.size}.pkl")
+        else:
+            fname = os.path.join(self.outfolder,f"noise_mean_{self.nsim}.pkl")
         if not os.path.isfile(fname):
             noise_alm = self.get_noise_cmb(mpi.rank)
             nlt = hp.alm2cl(noise_alm[0])
@@ -381,18 +384,32 @@ class SimExperimentFG:
                 total_nle = None
                 total_nlb = None
             
-            mpi.com.Reduce(nlt,total_nlt, op=mpi.mpi.SUM,root=0)
-            mpi.com.Reduce(nle,total_nle, op=mpi.mpi.SUM,root=0)
-            mpi.com.Reduce(nlb,total_nlb, op=mpi.mpi.SUM,root=0)
+            if mpi.size > 1:
+                mpi.com.Reduce(nlt,total_nlt, op=mpi.mpi.SUM,root=0)
+                mpi.com.Reduce(nle,total_nle, op=mpi.mpi.SUM,root=0)
+                mpi.com.Reduce(nlb,total_nlb, op=mpi.mpi.SUM,root=0)
+                mpi.barrier()
+                if mpi.rank == 0:
+                    mean_nlt = total_nlt/mpi.size # type: ignore
+                    mean_nle = total_nle/mpi.size # type: ignore
+                    mean_nlb = total_nlb/mpi.size # type: ignore
+            else:
+                for i in tqdm(range(self.nsim),desc='Computing Noise Spectra mean',unit='sim'):
+                    noise_alm = self.get_noise_cmb(mpi.rank)
+                    total_nlt += hp.alm2cl(noise_alm[0])
+                    total_nle += hp.alm2cl(noise_alm[1])
+                    total_nlb += hp.alm2cl(noise_alm[2])
+                    del noise_alm
 
-            if mpi.rank == 0:
-                mean_nlt = total_nlt/mpi.size # type: ignore
-                mean_nle = total_nle/mpi.size # type: ignore
-                mean_nlb = total_nlb/mpi.size # type: ignore
-                pl.dump([mean_nlt,mean_nle,mean_nlb],open(fname,'wb'))
+                mean_nlt = total_nlt/self.nsim # type: ignore
+                mean_nle = total_nle/self.nsim# type: ignore
+                mean_nlb = total_nlb/self.nsim
 
-            mpi.barrier()
-    
+
+            pl.dump([mean_nlt,mean_nle,mean_nlb],open(fname,'wb'))
+
+
+
     def noise_spectra(self,num):
         """
         To read the noise mean
@@ -404,9 +421,9 @@ class SimExperimentFG:
     def plot_noise_spectra(self,num):
         tl,el,bl = self.noise_spectra(num)
         plt.figure(figsize=(8,8))
-        plt.loglog(tl,label="T")
-        plt.loglog(el,label="E")
-        plt.loglog(bl,label="B")
+        plt.loglog(tl*self.Tcmb**2,label="T")
+        plt.loglog(el*self.Tcmb**2,label="E")
+        plt.loglog(bl*self.Tcmb**2,label="B")
         plt.loglog(self.cl_len[0,:]*self.Tcmb**2 ,label="T")
         plt.loglog(self.cl_len[1,:]*self.Tcmb**2 ,label="E")
         plt.loglog(self.cl_len[2,:]*self.Tcmb**2 ,label="B")

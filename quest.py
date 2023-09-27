@@ -28,7 +28,7 @@ class Reconstruction:
     verbose: bool : print the information of the reconstruction
     """
 
-    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose=False):
+    def __init__(self,filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,bin_opt='',verbose=False):
         self.filt_lib = filt_lib
         self.Lmax = Lmax
         self.rlmin = rlmin
@@ -56,6 +56,7 @@ class Reconstruction:
         self.cl_unl = camb_clfile(cl_unl)
         self.Tcmb = self.filt_lib.Tcmb
         self.nsim = self.filt_lib.nsim
+        self.bin_opt = bin_opt
 
         self.norm = self.get_norm
 
@@ -65,12 +66,16 @@ class Reconstruction:
 
         self.nbins = nbins
         self.tp_nbins = tp_nbins
-        self.binner = binning.multipole_binning(self.nbins,lmin=2,lmax=self.Lmax)
+        self.binner = binning.multipole_binning(self.nbins,lmin=2,lmax=self.Lmax,spc=self.bin_opt)
         self.binnertp = binning.multipole_binning(self.tp_nbins,lmin=2,lmax=self.Lmax)
         self.B = self.binner.bc
         self.Btp = self.binnertp.bc
         self.Bfac = (self.B*(self.B+1.))**2/(2*np.pi)
-        N1_file = os.path.join(self.lib_dir,'n1.pkl')
+        if self.fsky>0.8:
+            N1_extra = f'_{self.fsky:.2f}'
+        else:
+            N1_extra = ''
+        N1_file = os.path.join(self.lib_dir,f'n1{N1_extra}.pkl')
         self.N1 = pl.load(open(N1_file,'rb')) if os.path.isfile(N1_file) else np.zeros(self.Lmax+1)
         self.verbose = verbose
 
@@ -94,7 +99,8 @@ class Reconstruction:
         cl_unl = rc['cl_unl']
         nbins = rc['nbins']
         tp_nbins = rc['nbins_tp']
-        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,verbose)
+        bin_opt = rc['bin_opt']
+        return cls(filt_lib,Lmax,rlmin,rlmax,cl_unl,nbins,tp_nbins,bin_opt,verbose)
     
     def vprint(self,txt):
         """
@@ -236,6 +242,8 @@ class Reconstruction:
 
         n: int : number of simulations
         """
+        if n > self.nsim:
+            n = self.nsim
 
         def get_N0_mean(n):
             m = np.zeros(self.Lmax+1,dtype=np.float64)
@@ -270,7 +278,7 @@ class Reconstruction:
 
             mean_rdn0 = []
 
-            for i in tqdm(range(100),desc=f'RDN0 for simulation {idx}', leave=True, unit='sim'):
+            for i in tqdm(range(100),desc=f'RDN0 for simulation {idx}', leave=True, unit='sim',position=1):
                 E1,B1 = self.filt_lib.cinv_EB(myidx[i])
                 E2,B2 = self.filt_lib.cinv_EB(myidx[i+1])
                 # E_0,B_1
@@ -278,22 +286,26 @@ class Reconstruction:
                                             self.cl_len[1,:self.rlmax+1],
                                             E0[:self.rlmax+1,:self.rlmax+1],
                                             B1[:self.rlmax+1,:self.rlmax+1])
+                del clm
                 # E_1,B_0
                 glm2, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
                                             self.cl_len[1,:self.rlmax+1],
                                             E1[:self.rlmax+1,:self.rlmax+1],
                                             B0[:self.rlmax+1,:self.rlmax+1])
+                del clm
                 # E_1,B_2
                 glm3, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,
                                             self.cl_len[1,:self.rlmax+1],
                                             E1[:self.rlmax+1,:self.rlmax+1],
                                             B2[:self.rlmax+1,:self.rlmax+1])
+                del clm
                 # E_2,B_1
                 glm4, clm = cs.rec_lens.qeb(self.Lmax,self.rlmin,self.rlmax,    
                                             self.cl_len[1,:self.rlmax+1],
                                             E2[:self.rlmax+1,:self.rlmax+1],
                                             B1[:self.rlmax+1,:self.rlmax+1])
-                
+                del (clm,E1,B1,E2,B2)
+
 
                 glm1 *= self.norm[:,None]
                 glm2 *= self.norm[:,None]
@@ -301,16 +313,21 @@ class Reconstruction:
                 glm4 *= self.norm[:,None]
 
                 first_four = cs.utils.alm2cl(self.Lmax, glm1 + glm2)/(self.fsky) #type: ignore
+                del (glm1,glm2)
                 second_last = cs.utils.alm2cl(self.Lmax, glm3)/(self.fsky) #type: ignore
                 last = cs.utils.alm2cl(self.Lmax, glm3,glm4)/(self.fsky) #type: ignore
+                del (glm3,glm4)
 
                 mean_rdn0.append(first_four - second_last - last)
-            
+                del (first_four,second_last,last)
+
+            del (E0,B0)
             rdn0 = np.mean(mean_rdn0,axis=0)
             pl.dump(rdn0,open(fname,'wb'))
             return rdn0
-
-  
+    
+    def RDN0_mean(self,n=400):
+        return np.mean([self.RDN0(i) for i in range(n)], axis=0)
 
     def mean_field(self):
         """
@@ -327,7 +344,7 @@ class Reconstruction:
             if mpi.rank == 0:
                 pl.dump(arr,open(fname,'wb'))
             return arr
-    
+
     def mean_field_cl(self):
         """
         Mean Field bias cl
@@ -337,14 +354,22 @@ class Reconstruction:
         arr  += (1/n) * (arr+self.cl_pp[:self.Lmax+1])
         return arr
 
-    def wf_phi(self,idx):
+    def wf_phi(self,idx,kappa=False,filt_lmax=None):
         """
         Calculate the wiener filtered phi.
 
         idx: int : index of the simulation
         """
         phi = self.get_phi(idx) - self.mean_field()
-        return cs.utils.almxfl(self.Lmax,self.Lmax,phi,self.__kfac__)
+        phi =  cs.utils.almxfl(self.Lmax,self.Lmax,phi,self.__kfac__)
+        if kappa:
+            fl = self.L * (self.L + 1)/2
+            if filt_lmax is not None:
+                fl[filt_lmax:] = 0
+            klm = cs.utils.almxfl(self.Lmax,self.Lmax,phi,fl)
+            return cs.utils.hp_alm2map(self.nside,self.Lmax,self.Lmax,klm)
+        else:
+            return phi
     
     def deflection_angle(self,idx):
         """
@@ -379,7 +404,7 @@ class Reconstruction:
             return cs.utils.alm2cl(self.Lmax,self.get_phi(idx)-self.mean_field())/self.fsky
 
 
-    def get_input_phi_sim(self,idx):
+    def get_input_phi_sim(self,idx,kappa=False,filt_lmax=None):
         """
         Get the masked input potential alms. If the total no of sim
         is less than 200 then the input phi is constant. Otherwise
@@ -387,23 +412,31 @@ class Reconstruction:
 
         idx: int : index of the simulation
         """
+        if self.fsky > 0.8:
+            extra = f"_{self.fsky:.2f}"
+        else:
+            extra = ''
         if self.nsim <200:
             self.vprint("input phi is constant")
             dir_ = "/global/cfs/cdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps_c/MASS"
-            fname = os.path.join(dir_,f"phi_sims.fits")
+            fname = os.path.join(dir_,f"phi_sims{extra}.fits")
             fnamet = os.path.join(self.in_dir,f"phi_sims_c.pkl")
         else:
             self.vprint("input phi is from variying")
             dir_ = "/global/cfs/cdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
             fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
-            fnamet = os.path.join(self.in_dir,f"phi_sims_{idx:04d}.pkl")
-        if os.path.isfile(fnamet):
+            fnamet = os.path.join(self.in_dir,f"phi_sims{extra}_{idx:04d}.pkl")
+        if os.path.isfile(fnamet) and (not kappa):
             return pl.load(open(fnamet,'rb'))
         else:
             plm = hp.read_alm(fname)
             fl = self.L * (self.L + 1)/2
+            if filt_lmax is not None:
+                fl[filt_lmax:] = 0
             klm = hp.almxfl(plm,fl)
             kmap = hp.alm2map(klm,nside=self.nside)*self.mask
+            if kappa:
+                return kmap
             klm_n = cs.utils.hp_map2alm(self.nside,self.Lmax,self.Lmax,kmap)
             plm_n = cs.utils.almxfl(self.Lmax,self.Lmax,klm_n,1/fl)
             pl.dump(plm_n,open(fnamet,'wb')) 
@@ -495,7 +528,7 @@ class Reconstruction:
         else:
             return self.get_qcl(idx,n1,rdn0)/self.response_mean()**2   - ((self.MCN0()/self.response_mean()**2)+self.cl_pp)/100
 
-    def get_qcl_wR_stat(self,n=400,ret='dl',n1=True,rdn0=False):
+    def get_qcl_wR_stat(self,n=400,ret='dl',n1=True,rdn0=True,do_bining=True):
         """
         Get the total cl_phi
 
@@ -504,8 +537,9 @@ class Reconstruction:
         n1: bool : if True subtract N1
         rdn0: bool : if True subtract RDN0 else subtract MCN0
         """
+        bb = '' if do_bining else 'nb'
 
-        fname = os.path.join(self.lib_dir,f"qclSTAT_fsky_{self.fsky:.2f}_nbin_{self.nbins}_n_{n}_ret_{ret}_n1_{n1}_rd_{rdn0}.pkl")
+        fname = os.path.join(self.lib_dir,f"qclSTAT_fsky_{self.fsky:.2f}_nbin_{self.nbins}{self.bin_opt}{bb}_n_{n}_ret_{ret}_n1_{n1}_rd_{rdn0}.pkl")
         if os.path.isfile(fname):
             return pl.load(open(fname,'rb'))
         else:
@@ -517,7 +551,10 @@ class Reconstruction:
                 raise ValueError
             cl = []
             for i in tqdm(range(n), desc='qcl stat',unit='simulation'):
-                cl.append(self.bin_cell(self.get_qcl_wR(i,n1,rdn0)*self.Lfac))
+                if do_bining:
+                    cl.append(self.bin_cell(self.get_qcl_wR(i,n1,rdn0)*self.Lfac))
+                else:
+                    cl.append(self.get_qcl_wR(i,n1,rdn0)*self.Lfac)
             
             cl = np.array(cl)
             pl.dump(cl,open(fname,'wb'))
@@ -684,6 +721,7 @@ class Reconstruction:
         if mpi.size > 1:
             for i in job[mpi.rank::mpi.size]:
                 phi = self.N0_sim(i)
+                del phi
             mpi.barrier()
         else:
             for i in tqdm(job,desc='MCN0', unit='sim'):
@@ -699,9 +737,10 @@ class Reconstruction:
         if mpi.size > 1:
             for i in job[mpi.rank::mpi.size]:
                 rdn0 = self.RDN0(i)
+                del rdn0
             mpi.barrier()
         else:
-            for i in tqdm(job,desc='RDN0', unit='sim'):
+            for i in tqdm(job,desc='RDN0', unit='sim',position=0):
                 rdn0 = self.RDN0(i)
                 del rdn0
 
@@ -748,7 +787,12 @@ class N1:
     def __init__(self,c_phi_ini,v_phi_ini):
         self.c_phi_set = Reconstruction.from_ini(c_phi_ini)
         self.v_phi_set = Reconstruction.from_ini(v_phi_ini)
-        fname = os.path.join(self.v_phi_set.lib_dir,'n1.pkl')
+        if self.c_phi_set.fsky > 0.8:
+            assert self.c_phi_set.fsky == self.v_phi_set.fsky
+            extraname = f'_{self.c_phi_set.fsky:.2f}'
+        else:
+            extraname = ''
+        fname = os.path.join(self.v_phi_set.lib_dir,f'n1{extraname}.pkl')
         if os.path.isfile(fname):
             print('Loading N1')
             self.n1 = pl.load(open(fname,'rb'))

@@ -13,8 +13,7 @@
 
 
 source /global/homes/l/lonappan/.bashrc
-conda activate cmblens
-cd /global/u2/l/lonappan/workspace/LBlens
+cd /global/u2/l/lonappan/workspace/dell
 
 export ini=LB_FG1.ini
 
