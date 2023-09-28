@@ -7,9 +7,11 @@ import pickle as pl
 import socket
 from tqdm import tqdm
 import matplotlib.gridspec as gridspec
+import emcee
+from scipy.stats import gaussian_kde
 
 datapath = '../Data/paperNew'
-plotpath = '../plotsNew'
+plotpath = '../Notebooks/plots'
 
 os.makedirs(datapath,exist_ok=True)
 os.makedirs(plotpath,exist_ok=True)
@@ -45,8 +47,113 @@ if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['xtick.minor.pad']='10'
     plt.rcParams['hatch.color'] = 'black'
     plt.rcParams['lines.dashed_pattern']=3, 1.5
+    
+def find_density(arr):
+    density = gaussian_kde(arr,.3)
+    xs = np.linspace(min(arr),max(arr),1000)
+    ds = density(xs)
+    return xs,ds/max(ds)
 
 
+class Alens_fit:
+    
+    def __init__(self,reco):
+        self.rec = reco
+        self.fid = reco.bin_cell(reco.cl_pp*reco.Lfac)
+        self.spectra = self.spectra_()
+        self.icov = self.icov_()
+        
+    def spectra_(self):
+        return self.rec.get_qcl_wR_stat(400,rdn0=True,n1=True).mean(axis=0)
+    
+    def icov_(self):
+        cov = np.cov(self.rec.get_qcl_wR_stat(400,rdn0=True,n1=True).T)
+        return np.linalg.inv(cov)
+    
+    def chi_sq(self,alens):
+        dcl = self.spectra - (alens*self.fid)
+        return np.dot(dcl,np.dot(self.icov,dcl))
+    
+    def log_prior(self,theta):
+        if 0.5 < theta < 1.5:
+            return 0.0
+        return -np.inf
+
+    def log_likelihood(self,theta):
+        return -0.5 * self.chi_sq(theta)
+
+    def log_probability(self,theta):
+        lp = self.log_prior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + self.log_likelihood(theta)
+    
+
+    def get_samples(self):
+        pos = [1] + 1e-1 * np.random.randn(64, 1)
+        nwalkers,ndim = pos.shape
+        sampler = emcee.EnsembleSampler(nwalkers,ndim,self.log_probability)
+        sampler.run_mcmc(pos, 4000, progress=True)
+        flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
+        return flat_samples
+
+class crazymix:
+
+    def __init__(self,s1d1,other,idx=0,do_MC=False):
+        self.s1d1 = s1d1
+        self.other = other
+        self.idx = idx
+        self.B = self.s1d1.B
+        self.do_MC = do_MC
+        self.fiducial = self.other.bin_cell(self.other.cl_pp*self.other.Lfac)
+        self.icov = self.icov_()
+        self.spectra = self.get_spectra()
+
+    def get_data(self):
+        return self.s1d1.get_phi_cl(self.idx)
+
+    def get_spectra(self):
+
+        if self.do_MC:
+            N0 = self.other.MCN0()
+            correction =N0*0
+        else:
+            N0 = self.other.RDN0(self.idx)
+            correction = ((N0/self.other.response_mean()**2)+self.other.cl_pp)/100
+        cl = (self.get_data() - 
+              self.other.N1 - 
+              N0)/self.other.response_mean()**2
+
+        return self.other.bin_cell((cl-correction)*self.s1d1.Lfac)
+
+    def icov_(self):
+        return np.linalg.inv(np.cov(self.other.get_qcl_wR_stat().T))
+
+    def chi_sq(self,alens):
+        dcl = self.spectra - (alens*self.fiducial)
+        return np.dot(dcl,np.dot(self.icov,dcl))
+
+    def log_prior(self,theta):
+        if 0.5 < theta < 1.5:
+            return 0.0
+        return -np.inf
+
+    def log_likelihood(self,theta,):
+        return -0.5 * self.chi_sq(theta)
+
+    def log_probability(self,theta):
+        lp = self.log_prior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + self.log_likelihood(theta)
+
+    def get_samples(self):
+        pos = [1] + 1e-1 * np.random.randn(64, 1)
+        nwalkers,ndim = pos.shape
+        sampler = emcee.EnsembleSampler(nwalkers,ndim,self.log_probability)
+        sampler.run_mcmc(pos, 4000, progress=True)
+        flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
+        return flat_samples
 class Planck:
 
     def __init__(self):
@@ -197,6 +304,7 @@ class recStat:
             rec_nofg = self.rec_nofg
             rec_fg1 = self.rec_fg1
             rec_fg2 = self.rec_fg2
+            rec_fg3 = self.rec_fg3
             data = {}
             data['nofg_cl'] = rec_nofg.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
             data['fg2_cl'] = rec_fg2.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
@@ -205,6 +313,7 @@ class recStat:
             data['NOFG-MCN0'] = rec_nofg.Lfac*(rec_nofg.RDN0_mean()/rec_nofg.response_mean()**2 )
             data['fg1-MCN0'] = rec_fg1.Lfac*(rec_fg1.RDN0_mean()/rec_fg1.response_mean()**2 )
             data['fg2-MCN0'] = rec_fg2.Lfac*(rec_fg2.RDN0_mean()/rec_fg2.response_mean()**2 )
+            data['fg3-MCN0'] = rec_fg3.Lfac*(rec_fg3.RDN0_mean()/rec_fg3.response_mean()**2 )
             data['NOFG-MCER'] = rec_fg1.Lfac*(rec_nofg.MCN0()/rec_nofg.response_mean()**2 )/100
             data['fg2-MCER'] = rec_fg1.Lfac*(rec_fg2.MCN0()/rec_fg2.response_mean()**2 )/100
             data['NOFG-MF'] = rec_nofg.Lfac*rec_nofg.mean_field_cl()
@@ -440,13 +549,13 @@ class recStat:
 
     
     def plot_planck_comparsion(self,save=False):
-        fname = os.path.join(datapath,'recFG.pkl')
+        fname = os.path.join(datapath,'recQCL.pkl')
         data = pl.load(open(fname,'rb'))
         
         plt.figure(figsize=(7,7))
-        plt.loglog((Planck().PP['N'])[:len(data['fg2-MCN0'])],label='Planck(Pol)')
-        plt.loglog(data['fg2-MCN0'],label='LiteBIRD(EB)',c='g',ls='-.')
-        plt.loglog(data['fidm'],label='Signal',c='grey',lw=2)
+        plt.loglog((Planck().PP['N'])[:len(data['mcn0'])],label='Planck(Pol)')
+        plt.loglog(data['mcn0'],label='LiteBIRD(EB)',c='g',ls='-.')
+        plt.loglog(data['fid'],label='Signal',c='grey',lw=2)
         plt.xlim(2,600)
         plt.ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} N_L^{(0),MC}$',fontsize=25)
         plt.xticks(fontsize=15)
@@ -455,11 +564,103 @@ class recStat:
         plt.legend(ncol=2, fontsize=20)
         if save:
              plt.savefig(os.path.join(plotpath,f'planck_comp.pdf'), bbox_inches='tight',dpi=300)
+    
+    def plot_Alens_box(self,save=False):
+        fname = os.path.join(datapath,'Alens_samps.pkl')
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('Data Loaded from file')
+        else:
+            
+            data = {}
+            rec1 = self.rec_nofg
+            rec2 = self.rec_fg1
+            rec3 = self.rec_fg2
+            data['nofg_samp'] = Alens_fit(rec1).get_samples().reshape(-1)
+            data['fg1_samp'] = Alens_fit(rec2).get_samples().reshape(-1)
+            data['fg2_samp'] = Alens_fit(rec3).get_samples().reshape(-1)
+            pl.dump(data,open(fname,'wb'))
+            print('Data Saved to file')
 
+        nofg_samp = data['nofg_samp']
+        fg1_samp = data['fg1_samp']
+        fg2_samp = data['fg2_samp']
+        data_to_plot = [nofg_samp, fg1_samp, fg2_samp]
+        labels = ['No FG', 's0d0', 's1d1']
 
+        plt.figure(figsize=(6, 6))
+        sns.boxplot(data=data_to_plot)
+        plt.xticks(range(len(labels)),labels,fontsize=15)
+        plt.ylabel('$A_{\mathrm{lens}}$',fontsize=15)
+        plt.axhline(1,color='r',ls='--',lw=3)
+        plt.yticks(fontsize=15)
+        if save:
+            plt.savefig(os.path.join(plotpath,f'Alens_box.pdf'), bbox_inches='tight',dpi=300)
+    
+    
+    
+    def plot_KS_pvalue(self,save=False):
+        fname = os.path.join(plotpath,'pvalue.pdf')
+        pvalue = pl.load(open(os.path.join(datapath,'pvalue.pkl'),'rb'))
+        s0d0 = pvalue['s0d0']
+        s1d1 = pvalue['s1d1']
+        B = pvalue['b']
+        plt.figure(figsize=(6,6))
+        plt.plot(B,s0d0,label='s0d0',marker='o',c='C10')
+        plt.plot(B,s1d1,label='s1d1',marker='o',c='C3')
+        plt.axhline(0.05,color='k',ls='--',label='0.05',lw=3)
+        plt.legend(fontsize=15)
+        plt.ylabel('$p$-value',fontsize=15)
+        plt.xlabel('$\ell$',fontsize=15)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
+        if save:
+            plt.savefig(fname, bbox_inches='tight',dpi=300)
+    
+    def plot_mismatching_alens(self,save=False,do_MC=False):
+        fname = os.path.join(datapath,f'mismatch_samples{do_MC}.pkl')
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('Data Loaded from file')
+        else:
+            rec1 = self.rec_nofg
+            rec2 = self.rec_fg1
+            rec3 = self.rec_fg2
+            data ={}
+            data['nofg'] = crazymix(rec3,rec1,100,do_MC).get_samples().reshape(-1)
+            data['fg1'] = crazymix(rec3,rec2,100,do_MC).get_samples().reshape(-1)
+            data['fg2'] = crazymix(rec3,rec3,100,do_MC).get_samples().reshape(-1)
+            pl.dump(data,open(fname,'wb'))
+            print('Data Saved to file')
 
- 
+        snofg = data['nofg']
+        sfg1 = data['fg1']
+        sfg2 = data['fg2']
+
+        smm1=np.mean(snofg)
+        smm2=np.mean(sfg1)
+        smm3=np.mean(sfg2)
         
+        plt.figure(figsize=(8,6))
+        plt.plot(*find_density(snofg),lw=3,label='No FG')
+        plt.plot(*find_density(sfg1),lw=3,label='s0d0')
+        plt.plot(*find_density(sfg2),lw=3,label='s1d1')
+        plt.text(smm1-.013,1.02,f"{smm1:.2f}",fontsize=15)
+        plt.text(smm2-.013,1.02,f"{smm2:.2f}",fontsize=15)
+        plt.text(smm3-.013,1.02,f"{smm3:.2f}",fontsize=15)
+        plt.xlabel('$A_\mathrm{lens}$',fontsize=15)
+        plt.ylim(0,1.2)
+        plt.legend(fontsize=15,loc='lower right')
+        plt.xticks(fontsize=15)
+        plt.yticks([])
+        if save:
+            plt.savefig(os.path.join(plotpath,f'MM_alens{do_MC}.pdf'), bbox_inches='tight',dpi=300)
+
+
+
+
+
+
 class snrStat:
     def __init__(self,fg0=None,fg1=None,fg2=None):
         self.fg0 = fg0
@@ -494,3 +695,5 @@ class snrStat:
         print('NOFG :',self.fg0.snr_iswphi())
         print('s0d0 :',self.fg1.snr_iswphi())
         print('s1d1 :',self.fg2.snr_iswphi())
+
+
