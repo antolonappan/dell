@@ -334,9 +334,9 @@ class recStat:
         fig.subplots_adjust(hspace=0)
 
         axs[0].semilogy(data['fidm'],label='Signal',c='grey',lw=2)
-        axs[0].semilogy(data['NOFG-MCN0'], c='g', label='No FG',lw=2)
-        axs[0].semilogy(data['fg1-MCN0'], c='b', label='s0d0',lw=2)
-        axs[0].semilogy(data['fg2-MCN0'], c='r', label='s1d1',lw=2)
+        axs[0].semilogy(data['NOFG-MCN0'], c='g', label="$\\textbf{No FG}$",lw=2)
+        axs[0].semilogy(data['fg1-MCN0'], c='b', label="$\\textbf{s0d0}$",lw=2)
+        axs[0].semilogy(data['fg2-MCN0'], c='r', label="$\\textbf{s1d1}$",lw=2)
 
         axs[0].semilogy(data['NOFG-MCER']+(data['fidm']/100),c='g',ls=':',lw=3)
         axs[0].semilogy(data['fg2-MCER']+(data['fidm']/100),c='r',ls=':',lw=3)
@@ -354,7 +354,7 @@ class recStat:
 
 
         legend2_elements = [
-            plt.Line2D([0], [0], color='black', lw=2, label='$N_L^{(0),RD}$'),
+            plt.Line2D([0], [0], color='black', lw=2, label="$\langle N_L^{(0),RD} \\rangle$"),
             plt.Line2D([0], [0], color='black', lw=2, linestyle='--', label='$C_L^{MC}$'),
             plt.Line2D([0], [0], color='black', lw=2, linestyle='-.', label='$C_L^{MF}$')
         ]
@@ -411,6 +411,8 @@ class recStat:
             which =  0
         elif choose == 'rand':
             which = np.random.choice(np.arange(len(rcomb)))
+        elif type(choose) == int:
+            which = choose
         r1,r2 = rcomb[which]
         res = 5
         xsize=200
@@ -418,20 +420,20 @@ class recStat:
         plt.figure(figsize=(20,20))
         ax = plt.subplot(gs[0, 0])
         hp.gnomview(inputk,reso=res,rot=[r1,r2],norm='hist',title='',xsize=xsize,notext=True,hold=True)
-        plt.title('$\kappa_{LM}^{Input}$',fontsize=15)
-        plt.text(-.16,-.135,"Resolution = 5'/pix, 200$\\times$200 pix",rotation=90,fontsize=15)
+        plt.title('$\kappa_{LM}^\\texttt{Input}$',fontsize=20)
+        plt.text(-.16,-.135,"$Resolution = 5^\prime/pixel, 200\\times200\;pixel$",rotation=90,fontsize=18)
         ax = plt.subplot(gs[0, 1])
         hp.gnomview(output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
-        plt.title('$\kappa_{LM}^{Output}$',fontsize=15)
+        plt.title('$\kappa_{LM}^\\texttt{Output}$',fontsize=18)
         ax = plt.subplot(gs[0, 2])
         hp.gnomview(inputk-output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
-        plt.title('$\kappa_{LM}^{difference}$',fontsize=15)
+        plt.title('$\kappa_{LM}^\\texttt{Input-Output}$',fontsize=18)
         if save:
             plt.savefig(os.path.join(plotpath,'recMaps.pdf'), bbox_inches='tight',dpi=300)
 
 
 
-    def plot_SNR_impact_v2(self,save=False,color='gold'):
+    def plot_SNR_impact(self,save=False,color='gold'):
         """
         Difference in SNR between the foreground and no foreground case
         """
@@ -457,7 +459,7 @@ class recStat:
         SNR_fg2 = data['fg2-SNR']
         SNR_fg3 = data['fg3-SNR']
         #cases = ['Planck(pol)','Planck(MV)','No FG', 's0d0', 's1d1']
-        cases = ['No FG', 's0d0','s1d1',"s1d1 \n ($f_{sky}=0.9$)",'Planck(Pol)']#,'Planck(MV)']
+        cases = ['$\\textbf{No FG}$', '$\\textbf{s0d0}$','$\\textbf{s1d1}$',"$\\textbf{s1d1}$ \n ($f_{sky}=0.9$)",'$\\textsc{Planck}$'+"\n $(Pol)$"]#,'Planck(MV)']
         pl_pol = 9
         pl_mv = 40
         pl_pol_npipe = pl_pol*.2+pl_pol
@@ -499,11 +501,11 @@ class recStat:
         
         stat = data['stat']
         plt.figure(figsize=(8,7))
-        plt.loglog(data['fid'],label='Signal',c='grey',lw=2)
+        plt.loglog(data['fid'],label='$\\texttt{Signal}$',c='grey',lw=2)
         plt.loglog(data['mcn0'],label='$N_L^{(0)}$',c='r')
         plt.loglog(data['mcn1'],label='$N_L^{(1)}$',c='g')
         plt.loglog(data['mf'],label='$C_L^{MF}$',c='b')
-        plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='Reconstructed')
+        plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='$\\texttt{Reconstructed}$')
         plt.xlim(2,600)
         plt.legend(ncol=2, fontsize=20)
         plt.xlabel('$L$',fontsize=25)
@@ -535,15 +537,15 @@ class recStat:
         f,(ax1,ax2, axcb) = plt.subplots(1,3, gridspec_kw={'width_ratios':[1,1,0.08]},figsize=(10,5))
 
         ax1.get_shared_y_axes().join(ax1,ax2)
-        g1 = sns.heatmap(data[which]['mcn0'],cmap="coolwarm",cbar=False,ax=ax1)
-        g1.set_ylabel('b')
-        g1.set_xlabel('b')
-        g1.set_title('$N_L^{(0),MC}$')
-        g2 = sns.heatmap(data[which]['rdn0'],cmap="coolwarm",ax=ax2, cbar_ax=axcb)
-        g2.set_ylabel('b')
-        g2.set_xlabel('b')
+        g1 = sns.heatmap(data[which]['mcn0'],cmap="copper",cbar=False,ax=ax1)
+        g1.set_ylabel('$b$',fontsize=25)
+        g1.set_xlabel('$b$',fontsize=25)
+        g1.set_title('$N_L^{(0),MC}$',fontsize=25)
+        g2 = sns.heatmap(data[which]['rdn0'],cmap="copper",ax=ax2, cbar_ax=axcb)
+        #g2.set_ylabel('b')
+        g2.set_xlabel('$b$',fontsize=25)
         g2.set_yticks([])
-        g2.set_title('$N_L^{(0),RD}$')
+        g2.set_title('$N_L^{(0),RD}$',fontsize=25)
         if save:
             plt.savefig(os.path.join(plotpath,f'recCor{which}.pdf'), bbox_inches='tight',dpi=300)
 
@@ -553,9 +555,9 @@ class recStat:
         data = pl.load(open(fname,'rb'))
         
         plt.figure(figsize=(7,7))
-        plt.loglog((Planck().PP['N'])[:len(data['mcn0'])],label='Planck(Pol)')
-        plt.loglog(data['mcn0'],label='LiteBIRD(EB)',c='g',ls='-.')
-        plt.loglog(data['fid'],label='Signal',c='grey',lw=2)
+        plt.loglog((Planck().PP['N'])[:len(data['mcn0'])],label='$\\textsc{Planck}\\texttt{(Pol)}$',lw=3)
+        plt.loglog(data['mcn0'],label='$\\textsc{LiteBIRD}\\texttt{(EB)}$',c='r',lw=3)
+        plt.loglog(data['fid'],label='Signal',c='grey',lw=3)
         plt.xlim(2,600)
         plt.ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} N_L^{(0),MC}$',fontsize=25)
         plt.xticks(fontsize=15)
@@ -586,14 +588,14 @@ class recStat:
         fg1_samp = data['fg1_samp']
         fg2_samp = data['fg2_samp']
         data_to_plot = [nofg_samp, fg1_samp, fg2_samp]
-        labels = ['No FG', 's0d0', 's1d1']
+        labels = ['$\\textbf{No FG}$', '$\\textbf{s0d0}$', '$\\textbf{s1d1}$']
 
         plt.figure(figsize=(6, 6))
         sns.boxplot(data=data_to_plot)
-        plt.xticks(range(len(labels)),labels,fontsize=15)
-        plt.ylabel('$A_{\mathrm{lens}}$',fontsize=15)
+        plt.xticks(range(len(labels)),labels,fontsize=25)
+        plt.ylabel('$A_{\mathrm{lens}}$',fontsize=25)
         plt.axhline(1,color='r',ls='--',lw=3)
-        plt.yticks(fontsize=15)
+        plt.yticks(fontsize=25)
         if save:
             plt.savefig(os.path.join(plotpath,f'Alens_box.pdf'), bbox_inches='tight',dpi=300)
     
@@ -606,14 +608,14 @@ class recStat:
         s1d1 = pvalue['s1d1']
         B = pvalue['b']
         plt.figure(figsize=(6,6))
-        plt.plot(B,s0d0,label='s0d0',marker='o',c='C10')
-        plt.plot(B,s1d1,label='s1d1',marker='o',c='C3')
-        plt.axhline(0.05,color='k',ls='--',label='0.05',lw=3)
+        plt.plot(B,s0d0,label='$\\textbf{s0d0}$',marker='o',c='C10')
+        plt.plot(B,s1d1,label='$\\textbf{s1d1}$',marker='o',c='C3')
+        plt.axhline(0.05,color='k',ls='--',label='$0.05$',lw=3)
         plt.legend(fontsize=15)
-        plt.ylabel('$p$-value',fontsize=15)
-        plt.xlabel('$\ell$',fontsize=15)
-        plt.xticks(fontsize=15)
-        plt.yticks(fontsize=15)
+        plt.ylabel('$\\mathrm{KS} \;\; p-\\mathrm{value}$',fontsize=25)
+        plt.xlabel('$L$',fontsize=25)
+        plt.xticks(fontsize=25)
+        plt.yticks(fontsize=25)
         if save:
             plt.savefig(fname, bbox_inches='tight',dpi=300)
     
@@ -642,16 +644,16 @@ class recStat:
         smm3=np.mean(sfg2)
         
         plt.figure(figsize=(8,6))
-        plt.plot(*find_density(snofg),lw=3,label='No FG')
-        plt.plot(*find_density(sfg1),lw=3,label='s0d0')
-        plt.plot(*find_density(sfg2),lw=3,label='s1d1')
-        plt.text(smm1-.013,1.02,f"{smm1:.2f}",fontsize=15)
-        plt.text(smm2-.013,1.02,f"{smm2:.2f}",fontsize=15)
-        plt.text(smm3-.013,1.02,f"{smm3:.2f}",fontsize=15)
-        plt.xlabel('$A_\mathrm{lens}$',fontsize=15)
+        plt.plot(*find_density(snofg),lw=3,label='$\\textbf{No FG}$')
+        plt.plot(*find_density(sfg1),lw=3,label='$\\textbf{s0d0}$')
+        plt.plot(*find_density(sfg2),lw=3,label='$\\textbf{s1d1}$')
+        plt.text(smm1-.013,1.02,f"{smm1:.2f}",fontsize=25)
+        plt.text(smm2-.013,1.02,f"{smm2:.2f}",fontsize=25)
+        plt.text(smm3-.013,1.02,f"{smm3:.2f}",fontsize=25)
+        plt.xlabel('$A_\mathrm{lens}$',fontsize=25)
         plt.ylim(0,1.2)
-        plt.legend(fontsize=15,loc='lower right')
-        plt.xticks(fontsize=15)
+        plt.legend(fontsize=18,loc='lower center',bbox_to_anchor=(0.6, 0.4))
+        plt.xticks(fontsize=25)
         plt.yticks([])
         if save:
             plt.savefig(os.path.join(plotpath,f'MM_alens{do_MC}.pdf'), bbox_inches='tight',dpi=300)
