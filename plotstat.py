@@ -6,6 +6,15 @@ import seaborn as sns
 import pickle as pl
 import socket
 from tqdm import tqdm
+import matplotlib.gridspec as gridspec
+import emcee
+from scipy.stats import gaussian_kde
+
+datapath = '../Data/paperNew'
+plotpath = '../Notebooks/plots'
+
+os.makedirs(datapath,exist_ok=True)
+os.makedirs(plotpath,exist_ok=True)
 
 if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['text.usetex']=True
@@ -38,8 +47,113 @@ if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['xtick.minor.pad']='10'
     plt.rcParams['hatch.color'] = 'black'
     plt.rcParams['lines.dashed_pattern']=3, 1.5
+    
+def find_density(arr):
+    density = gaussian_kde(arr,.3)
+    xs = np.linspace(min(arr),max(arr),1000)
+    ds = density(xs)
+    return xs,ds/max(ds)
 
 
+class Alens_fit:
+    
+    def __init__(self,reco):
+        self.rec = reco
+        self.fid = reco.bin_cell(reco.cl_pp*reco.Lfac)
+        self.spectra = self.spectra_()
+        self.icov = self.icov_()
+        
+    def spectra_(self):
+        return self.rec.get_qcl_wR_stat(400,rdn0=True,n1=True).mean(axis=0)
+    
+    def icov_(self):
+        cov = np.cov(self.rec.get_qcl_wR_stat(400,rdn0=True,n1=True).T)
+        return np.linalg.inv(cov)
+    
+    def chi_sq(self,alens):
+        dcl = self.spectra - (alens*self.fid)
+        return np.dot(dcl,np.dot(self.icov,dcl))
+    
+    def log_prior(self,theta):
+        if 0.5 < theta < 1.5:
+            return 0.0
+        return -np.inf
+
+    def log_likelihood(self,theta):
+        return -0.5 * self.chi_sq(theta)
+
+    def log_probability(self,theta):
+        lp = self.log_prior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + self.log_likelihood(theta)
+    
+
+    def get_samples(self):
+        pos = [1] + 1e-1 * np.random.randn(64, 1)
+        nwalkers,ndim = pos.shape
+        sampler = emcee.EnsembleSampler(nwalkers,ndim,self.log_probability)
+        sampler.run_mcmc(pos, 4000, progress=True)
+        flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
+        return flat_samples
+
+class crazymix:
+
+    def __init__(self,s1d1,other,idx=0,do_MC=False):
+        self.s1d1 = s1d1
+        self.other = other
+        self.idx = idx
+        self.B = self.s1d1.B
+        self.do_MC = do_MC
+        self.fiducial = self.other.bin_cell(self.other.cl_pp*self.other.Lfac)
+        self.icov = self.icov_()
+        self.spectra = self.get_spectra()
+
+    def get_data(self):
+        return self.s1d1.get_phi_cl(self.idx)
+
+    def get_spectra(self):
+
+        if self.do_MC:
+            N0 = self.other.MCN0()
+            correction =N0*0
+        else:
+            N0 = self.other.RDN0(self.idx)
+            correction = ((N0/self.other.response_mean()**2)+self.other.cl_pp)/100
+        cl = (self.get_data() - 
+              self.other.N1 - 
+              N0)/self.other.response_mean()**2
+
+        return self.other.bin_cell((cl-correction)*self.s1d1.Lfac)
+
+    def icov_(self):
+        return np.linalg.inv(np.cov(self.other.get_qcl_wR_stat().T))
+
+    def chi_sq(self,alens):
+        dcl = self.spectra - (alens*self.fiducial)
+        return np.dot(dcl,np.dot(self.icov,dcl))
+
+    def log_prior(self,theta):
+        if 0.5 < theta < 1.5:
+            return 0.0
+        return -np.inf
+
+    def log_likelihood(self,theta,):
+        return -0.5 * self.chi_sq(theta)
+
+    def log_probability(self,theta):
+        lp = self.log_prior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + self.log_likelihood(theta)
+
+    def get_samples(self):
+        pos = [1] + 1e-1 * np.random.randn(64, 1)
+        nwalkers,ndim = pos.shape
+        sampler = emcee.EnsembleSampler(nwalkers,ndim,self.log_probability)
+        sampler.run_mcmc(pos, 4000, progress=True)
+        flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
+        return flat_samples
 class Planck:
 
     def __init__(self):
@@ -65,7 +179,7 @@ class simStat:
         self.fg2 = fg2
     
     def plot_fg1(self,save=False):
-        fname = '../Data/paper/simFG1.pkl'
+        fname = os.path.join(datapath,'simFG1.pkl')
         if os.path.isfile(fname):
             data = pl.load(open(fname,'rb'))
             print('Data Loaded from file')
@@ -105,7 +219,7 @@ class simStat:
             plt.savefig('plots/simFG1.pdf',bbox_inches='tight',dpi=300)
     
     def plot_fg2(self,save=False):
-        fname = '../Data/paper/simFG2.pkl'
+        fname = os.path.join(datapath,'simFG2.pkl')
         if not os.path.isfile(fname):
             data = {}
             _,fg1_nl_e,fg1_nl_b = self.sim_fg1.noise_spectra(500)
@@ -151,8 +265,8 @@ class simStat:
         ax2.set_xlim(2,600)
 
         if save:
-            plt.savefig('plots/simFG2.pdf',bbox_inches='tight',dpi=300)
-        
+            plt.savefig(os.path.join(plotpath,'simFG2.pdf'),bbox_inches='tight',dpi=300)
+
 
 
 
@@ -169,19 +283,20 @@ class recStat:
     rec_fg1 : object : Reconstruction object with foregrounds
     """
 
-    def __init__(self,rec_nofg=None,rec_fg1=None,rec_fg2=None,fg1='s0d0',fg2='s1d1'):
+    def __init__(self,rec_nofg=None,rec_fg1=None,rec_fg2=None,rec_fg3=None,fg1='s0d0',fg2='s1d1'):
         self.rec_nofg = rec_nofg
         self.rec_fg1 = rec_fg1
         self.rec_fg2 = rec_fg2
+        self.rec_fg3 = rec_fg3
         self.fg1 = fg1
         self.fg2 = fg2
 
-    def plot_fg_impact(self,save=False,planck=True,logy=False):
+    def plot_fg_impactNew(self,save=False,planck=True,logy=False,shift=0):
         """
         Plot the impact of foregrounds on the reconstruction
         """
 
-        fname = '../Data/paper/recFG.pkl'
+        fname = os.path.join(datapath,'recFG.pkl')
         if os.path.isfile(fname):
             data = pl.load(open(fname,'rb'))
             print('Data Loaded from file')
@@ -189,14 +304,16 @@ class recStat:
             rec_nofg = self.rec_nofg
             rec_fg1 = self.rec_fg1
             rec_fg2 = self.rec_fg2
+            rec_fg3 = self.rec_fg3
             data = {}
             data['nofg_cl'] = rec_nofg.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
             data['fg2_cl'] = rec_fg2.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
             data['fid'] = rec_fg1.bin_cell(rec_fg1.cl_pp*rec_fg1.Lfac)
             data['fidm'] = rec_fg1.cl_pp*rec_fg1.Lfac
-            data['NOFG-MCN0'] = rec_nofg.Lfac*(rec_nofg.MCN0()/rec_nofg.response_mean()**2 )
-            data['fg1-MCN0'] = rec_fg1.Lfac*(rec_fg1.MCN0()/rec_fg1.response_mean()**2 )
-            data['fg2-MCN0'] = rec_fg2.Lfac*(rec_fg2.MCN0()/rec_fg2.response_mean()**2 )
+            data['NOFG-MCN0'] = rec_nofg.Lfac*(rec_nofg.RDN0_mean()/rec_nofg.response_mean()**2 )
+            data['fg1-MCN0'] = rec_fg1.Lfac*(rec_fg1.RDN0_mean()/rec_fg1.response_mean()**2 )
+            data['fg2-MCN0'] = rec_fg2.Lfac*(rec_fg2.RDN0_mean()/rec_fg2.response_mean()**2 )
+            data['fg3-MCN0'] = rec_fg3.Lfac*(rec_fg3.RDN0_mean()/rec_fg3.response_mean()**2 )
             data['NOFG-MCER'] = rec_fg1.Lfac*(rec_nofg.MCN0()/rec_nofg.response_mean()**2 )/100
             data['fg2-MCER'] = rec_fg1.Lfac*(rec_fg2.MCN0()/rec_fg2.response_mean()**2 )/100
             data['NOFG-MF'] = rec_nofg.Lfac*rec_nofg.mean_field_cl()
@@ -213,154 +330,112 @@ class recStat:
         fid = data['fid']
 
         fig, axs = plt.subplots(2, 1,figsize=(9,9), gridspec_kw={'height_ratios': [4, 1]}, sharex=True)
-        plt.setp(axs, xlim=(2,620))
+        plt.setp(axs, xlim=(2,690))
         fig.subplots_adjust(hspace=0)
 
-
         axs[0].semilogy(data['fidm'],label='Signal',c='grey',lw=2)
-        axs[0].semilogy(data['NOFG-MCN0'],label='NOFG $N_L^{(0),MC}$',c='b',ls='-.')
-        axs[0].semilogy(data['fg1-MCN0'],label=f"{self.fg1}"+ " $N_L^{(0),MC}$",c='r',ls='-.')
-        axs[0].semilogy(data['fg2-MCN0'],label=f"{self.fg2}"+ " $N_L^{(0),MC}$",ls='-.')
-        axs[0].semilogy(data['NOFG-MCER']+(data['fidm']/100),label='NOFG $C_L^{MC}$',ls=':',lw=3)
-        axs[0].semilogy(data['fg2-MCER']+(data['fidm']/100),label=f"{self.fg2}"+ " $C_L^{MC}$",ls=':',lw=3)
-        axs[0].semilogy(data['NOFG-MF'],label='NOFG $C_L^{MF}$',c='y')
-        axs[0].semilogy(data['fg2-MF'],label=f"{self.fg2}"+ " $C_L^{MF}$",c='g')
+        axs[0].semilogy(data['NOFG-MCN0'], c='g', label='No FG',lw=2)
+        axs[0].semilogy(data['fg1-MCN0'], c='b', label='s0d0',lw=2)
+        axs[0].semilogy(data['fg2-MCN0'], c='r', label='s1d1',lw=2)
+
+        axs[0].semilogy(data['NOFG-MCER']+(data['fidm']/100),c='g',ls=':',lw=3)
+        axs[0].semilogy(data['fg2-MCER']+(data['fidm']/100),c='r',ls=':',lw=3)
+
+        axs[0].semilogy(data['NOFG-MF'],c='g',ls='-.')
+        axs[0].semilogy(data['fg2-MF'],c='r',ls='-.')
         if planck:
-            axs[0].semilogy((Planck().MV['N'])[:len(self.rec_fg2.Lfac)],label='Planck(MV)')
+            axs[0].semilogy((Planck().MV['N'])[:len(data['fg1-MCN0'])],label='Planck(MV)')
         if logy:
             axs[0].semilogx()
-        axs[0].legend(ncol=3, fontsize=16,frameon=False)
+        #axs[0].legend(ncol=3, fontsize=16,frameon=False)
         axs[0].set_ylim(1e-9,1e-5)
         axs[0].set_ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} C_L^{\phi\phi}$',fontsize=25)
+        legend1 = axs[0].legend(loc='upper left', fontsize=15)
 
-        axs[1].errorbar(data['B'],fg2_cl.mean(axis=0)/fid,yerr=fg2_cl.std(axis=0)/fid,label=f'{self.fg2}',c='r',fmt='o')
-        axs[1].errorbar(data['B'],nofg_cl.mean(axis=0)/fid,yerr=nofg_cl.std(axis=0)/fid,label='NOFG',c='b',fmt='o')
+
+        legend2_elements = [
+            plt.Line2D([0], [0], color='black', lw=2, label='$N_L^{(0),RD}$'),
+            plt.Line2D([0], [0], color='black', lw=2, linestyle='--', label='$C_L^{MC}$'),
+            plt.Line2D([0], [0], color='black', lw=2, linestyle='-.', label='$C_L^{MF}$')
+        ]
+
+
+        legend2 = axs[0].legend(handles=legend2_elements, loc='upper right', fontsize=15, frameon=False)
+
+
+        axs[0].add_artist(legend1)
+        axs[0].add_artist(legend2)
+
+
+
+        axs[1].errorbar(data['B']+shift,fg2_cl.mean(axis=0)/fid,yerr=fg2_cl.std(axis=0)/fid,label=f'{self.fg2}',c='r',fmt='o')
+        axs[1].errorbar(data['B'],nofg_cl.mean(axis=0)/fid,yerr=nofg_cl.std(axis=0)/fid,label='NOFG',c='g',fmt='o')
         axs[1].set_ylim(-0.1,2.3)
-        axs[1].legend(ncol=2, fontsize=15,loc='upper left')
+        #axs[1].legend(ncol=2, fontsize=15,loc='upper right')
         axs[1].axhline(1,c='k')
         axs[1].set_ylabel('$\\frac{C_L^{\phi\phi,rec}}{C_L^{\phi\phi,signal}}$',fontsize=25)
         axs[1].set_xlabel("$L$",fontsize=25)
         if save:
-            plt.savefig('plots/recFG.pdf', bbox_inches='tight',dpi=300)
+            plt.savefig(os.path.join(plotpath,'recFG.pdf'), bbox_inches='tight',dpi=300)
 
 
-    def plot_map_dif(self,idx=35,save=False):
+
+
+    def plot_map_dif(self,idx=0,save=False,choose='best'):
         """
         Plot the difference between the input and reconstructed maps
         """
-        fnamei = '../Data/paper/phi_input_35.fits'
-        fnameo = '../Data/paper/phi_output_35.fits'
+        fnamei = os.path.join(datapath,'phi_input_0.fits')
+        fnameo = os.path.join(datapath,'phi_output_0.fits')
+        
+        rec_fg3 = self.rec_fg3
 
         if os.path.exists(fnamei):
-            input = hp.read_map(fnamei)
+            inputk = hp.read_map(fnamei)
             print('Input Map Loaded from file')
         else:
-            rec_fg2 = self.rec_fg2
-            dir_ = "/project/projectdirs/litebird/simulations/maps/lensing_project_paper/S4BIRD/CMB_Lensed_Maps/MASS"
-            fname = os.path.join(dir_,f"phi_sims_{idx:04d}.fits")
-            phi = hp.read_alm(fname)
-            DfacL = np.arange(1025)
-            Dfac = np.sqrt(DfacL*(DfacL+1))
-            Dfac[:10] = 0
-            dphi = hp.almxfl(phi,Dfac)
-            input = hp.ma(hp.alm2map(dphi,512))
-            input.mask = np.logical_not(rec_fg2.mask)
-            hp.write_map(fnamei,input)
+            inputk = rec_fg3.get_input_phi_sim(0,True,80)
+            hp.write_map(fnamei,inputk)
             print('Input Map Saved to file')
         
         if os.path.exists(fnameo):
             output = hp.read_map(fnameo)
             print('Output Map Loaded from file')
         else:
-            output = hp.ma(rec_fg2.deflection_map(idx))
-            output.mask = np.logical_not(rec_fg2.mask)
+            output = rec_fg3.wf_phi(0,True,80)
             hp.write_map(fnameo,output)
             print('Output Map Saved to file')
-
+        
+        rcomb = [[68,81],[77,66],[79,92],[95,55],[88,51]]
+        if (choose == 'best') or None:
+            which =  0
+        elif choose == 'rand':
+            which = np.random.choice(np.arange(len(rcomb)))
+        r1,r2 = rcomb[which]
+        res = 5
+        xsize=200
+        gs = gridspec.GridSpec(1, 3,wspace=0.1)
         plt.figure(figsize=(20,20))
-        plt.subplots_adjust(wspace=5)
-        hp.mollview(input,norm='hist',min=-.0005,max=.001,title='$\\sqrt{L(L+1)}\phi^{input}_{LM}$',sub=(1,2,1),notext=True)
-        hp.mollview(output,norm='hist',min=-.0005,max=.001,title='$\\sqrt{L(L+1)}\phi^{WF,rec}_{LM}$',sub=(1,2,2),notext=True)
+        ax = plt.subplot(gs[0, 0])
+        hp.gnomview(inputk,reso=res,rot=[r1,r2],norm='hist',title='',xsize=xsize,notext=True,hold=True)
+        plt.title('$\kappa_{LM}^{Input}$',fontsize=15)
+        plt.text(-.16,-.135,"Resolution = 5'/pix, 200$\\times$200 pix",rotation=90,fontsize=15)
+        ax = plt.subplot(gs[0, 1])
+        hp.gnomview(output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
+        plt.title('$\kappa_{LM}^{Output}$',fontsize=15)
+        ax = plt.subplot(gs[0, 2])
+        hp.gnomview(inputk-output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
+        plt.title('$\kappa_{LM}^{difference}$',fontsize=15)
         if save:
-            plt.savefig('plots/recMaps.pdf', bbox_inches='tight',dpi=300)
+            plt.savefig(os.path.join(plotpath,'recMaps.pdf'), bbox_inches='tight',dpi=300)
 
-    def SNR_impact(self):
-        """
-        Difference in SNR between the foreground and no foreground case
-        """
-        fname = '../Data/paper/snr.pkl'
-        if os.path.exists(fname):
-            data = pl.load(open(fname,'rb'))
-            print('SNR Loaded from file')
-        else:
-            data = {}
-            rec_nofg = self.rec_nofg
-            rec_fg1 = self.rec_fg1
-            rec_fg2 = self.rec_fg2
-            data['NOFG-SNR'] = rec_nofg.SNR_phi(rdn0=True)
-            data['fg1-SNR'] = rec_fg1.SNR_phi(rdn0=True)
-            data['fg2-SNR'] = rec_fg2.SNR_phi(rdn0=True)
-            pl.dump(data,open(fname,'wb'))
-            print('SNR Saved to file')
 
-        SNR_nofg =  data['NOFG-SNR']
-        SNR_fg1 = data['fg1-SNR']
-        SNR_fg2 = data['fg2-SNR']
-
-        print(f"SNR NOFG: {SNR_nofg:.2f}")
-        print(f"SNR FG1: {SNR_fg1:.2f} decreased by {(1-SNR_fg1/SNR_nofg)*100:.2f} %")
-        print(f"SNR FG2: {SNR_fg2:.2f} decreased by {(1-SNR_fg2/SNR_nofg)*100:.2f} %")
-    
-    def plot_SNR_impact(self,save=False,color='gold'):
-        """
-        Difference in SNR between the foreground and no foreground case
-        """
-        fname = '../Data/paper/snr.pkl'
-        if os.path.exists(fname):
-            data = pl.load(open(fname,'rb'))
-            print('SNR Loaded from file')
-        else:
-            data = {}
-            rec_nofg = self.rec_nofg
-            rec_fg1 = self.rec_fg1
-            rec_fg2 = self.rec_fg2
-            data['NOFG-SNR'] = rec_nofg.SNR_phi(rdn0=True)
-            data['fg1-SNR'] = rec_fg1.SNR_phi(rdn0=True)
-            data['fg2-SNR'] = rec_fg2.SNR_phi(rdn0=True)
-            pl.dump(data,open(fname,'wb'))
-            print('SNR Saved to file')
-        
-        SNR_nofg =  data['NOFG-SNR']
-        SNR_fg1 = data['fg1-SNR']
-        SNR_fg2 = data['fg2-SNR']
-        cases = ['No FG', 's0d0', 's1d1']
-        snr = [SNR_nofg, SNR_fg1, SNR_fg2]
- 
-        plt.figure(figsize=(6, 8))
-        plot = plt.bar(cases, snr,color=color)
-        for i,value in enumerate(plot):
-            height = value.get_height()
-            plt.text(value.get_x() + value.get_width()/2.,
-                    1*height,f"${height:.2f}$", ha='center', va='bottom', fontsize=25)
-            if i==0:
-                pass
-            else:
-                plt.text(value.get_x() + value.get_width()/2.,
-                    37,f"$-{(1-snr[i]/snr[0])*100:.2f}\%$", ha='center', va='bottom', fontsize=22)
-        
-        plt.xlabel(" ")
-        plt.ylabel("SNR($\sigma$)")
-        plt.ylim(35,None)
-        plt.axhline(y=40, color='r', linestyle='--',label='Planck 2018')
-        plt.legend() 
-        if save:
-            plt.savefig('plots/SNR_impact.pdf', bbox_inches='tight',dpi=300)
 
     def plot_SNR_impact_v2(self,save=False,color='gold'):
         """
         Difference in SNR between the foreground and no foreground case
         """
-        fname = '../Data/paper/snr.pkl'
+        fname = os.path.join(datapath,'snr.pkl')
         if os.path.exists(fname):
             data = pl.load(open(fname,'rb'))
             print('SNR Loaded from file')
@@ -369,21 +444,25 @@ class recStat:
             rec_nofg = self.rec_nofg
             rec_fg1 = self.rec_fg1
             rec_fg2 = self.rec_fg2
+            rec_fg3 = self.rec_fg3
             data['NOFG-SNR'] = rec_nofg.SNR_phi(rdn0=True)
             data['fg1-SNR'] = rec_fg1.SNR_phi(rdn0=True)
             data['fg2-SNR'] = rec_fg2.SNR_phi(rdn0=True)
+            data['fg3-SNR'] = rec_fg3.SNR_phi(rdn0=True)
             pl.dump(data,open(fname,'wb'))
             print('SNR Saved to file')
         
         SNR_nofg =  data['NOFG-SNR']
         SNR_fg1 = data['fg1-SNR']
         SNR_fg2 = data['fg2-SNR']
-        cases = ['Planck(pol)','Planck(MV)','No FG', 's0d0', 's1d1']
+        SNR_fg3 = data['fg3-SNR']
+        #cases = ['Planck(pol)','Planck(MV)','No FG', 's0d0', 's1d1']
+        cases = ['No FG', 's0d0','s1d1',"s1d1 \n ($f_{sky}=0.9$)",'Planck(Pol)']#,'Planck(MV)']
         pl_pol = 9
         pl_mv = 40
         pl_pol_npipe = pl_pol*.2+pl_pol
         pl_mv_npipe = pl_mv*.2+pl_mv
-        snr = [pl_pol_npipe,pl_mv_npipe,SNR_nofg, SNR_fg1, SNR_fg2]
+        snr = [SNR_nofg,SNR_fg1,SNR_fg2,SNR_fg3,pl_pol_npipe]#,pl_mv_npipe]
         plt.figure(figsize=(8, 6))
         
         plot = plt.barh(cases[::-1],snr[::-1],color=color)
@@ -394,24 +473,26 @@ class recStat:
 
         
 
-        plt.xlabel("SNR($\sigma$)") 
+        plt.xlabel("Signal to Noise Ratio",fontsize=20) 
         plt.xlim(0,60)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15,rotation=45)
         if save:
-            plt.savefig('plots/SNR_impact_v2.pdf', bbox_inches='tight',dpi=300)      
+            plt.savefig(os.path.join(plotpath,'SNR_impact_v2.pdf'), bbox_inches='tight',dpi=300)      
     
     def plot_qcl_stat(self,save=False):
-        fname = '../Data/paper/recQCL.pkl'
+        fname = os.path.join(datapath,'recQCL.pkl')
         if os.path.exists(fname):
             data = pl.load(open(fname,'rb'))
             print('Data Loaded from file')
         else:
             data = {}
-            data['stat']= self.rec_fg2.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
-            data['fid'] = self.rec_fg2.cl_pp*self.rec_fg2.Lfac
-            data['mcn0'] = self.rec_fg2.Lfac*(self.rec_fg2.MCN0()/self.rec_fg2.response_mean()**2 )
-            data['mcn1'] = self.rec_fg2.Lfac*self.rec_fg2.N1
-            data['mf'] = self.rec_fg2.Lfac*self.rec_fg2.mean_field_cl()
-            data['B'] = self.rec_fg2.B
+            data['stat']= self.rec_fg3.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
+            data['fid'] = self.rec_fg3.cl_pp*self.rec_fg3.Lfac
+            data['mcn0'] = self.rec_fg3.Lfac*(self.rec_fg3.MCN0()/self.rec_fg3.response_mean()**2 )
+            data['mcn1'] = self.rec_fg3.Lfac*self.rec_fg3.N1
+            data['mf'] = self.rec_fg3.Lfac*self.rec_fg3.mean_field_cl()
+            data['B'] = self.rec_fg3.B
             pl.dump(data,open(fname,'wb'))
             print('Data Saved to file')
 
@@ -430,10 +511,10 @@ class recStat:
         plt.xticks(fontsize=20)
         plt.yticks(fontsize=20)
         if save:
-            plt.savefig('plots/recQCL.pdf', bbox_inches='tight',dpi=300)
+            plt.savefig(os.path.join(plotpath,'recQCL.pdf'), bbox_inches='tight',dpi=300)
     
     def plot_bin_corr_comp(self,which=1,save=False):
-        fname = f'../Data/paper/bin_corr.pkl'
+        fname = os.path.join(datapath,'bin_corr.pkl')
         if os.path.exists(fname):
             data = pl.load(open(fname,'rb'))
             print('Data Loaded from file')
@@ -451,8 +532,7 @@ class recStat:
             pl.dump(data,open(fname,'wb'))
             print('Data Saved to file')
 
-        f,(ax1,ax2, axcb) = plt.subplots(1,3, 
-            gridspec_kw={'width_ratios':[1,1,0.08]},figsize=(10,5))
+        f,(ax1,ax2, axcb) = plt.subplots(1,3, gridspec_kw={'width_ratios':[1,1,0.08]},figsize=(10,5))
 
         ax1.get_shared_y_axes().join(ax1,ax2)
         g1 = sns.heatmap(data[which]['mcn0'],cmap="coolwarm",cbar=False,ax=ax1)
@@ -465,26 +545,122 @@ class recStat:
         g2.set_yticks([])
         g2.set_title('$N_L^{(0),RD}$')
         if save:
-            plt.savefig(f'plots/recCor{which}.pdf', bbox_inches='tight',dpi=300)
+            plt.savefig(os.path.join(plotpath,f'recCor{which}.pdf'), bbox_inches='tight',dpi=300)
 
     
     def plot_planck_comparsion(self,save=False):
-        p = Planck()
-        spectra = []
-        for i in tqdm(range(10)):
-            spectra.append(self.rec_fg2.get_qcl_wR(i,n1=True,rdn0=True))
-
-        spectra = np.array(spectra).mean(axis=0)
-        spectra[0] = 0
-        spectra[1] = 0
-        plt.loglog(spectra*self.rec_fg2.Lfac)
-        plt.loglog((p.PP['N'])[:len(self.rec_fg2.Lfac)])
-        plt.loglog(self.rec_fg2.MCN0()*self.rec_fg2.Lfac)
-
-
-
- 
+        fname = os.path.join(datapath,'recQCL.pkl')
+        data = pl.load(open(fname,'rb'))
         
+        plt.figure(figsize=(7,7))
+        plt.loglog((Planck().PP['N'])[:len(data['mcn0'])],label='Planck(Pol)')
+        plt.loglog(data['mcn0'],label='LiteBIRD(EB)',c='g',ls='-.')
+        plt.loglog(data['fid'],label='Signal',c='grey',lw=2)
+        plt.xlim(2,600)
+        plt.ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} N_L^{(0),MC}$',fontsize=25)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
+        plt.xlabel('L',fontsize=25)
+        plt.legend(ncol=2, fontsize=20)
+        if save:
+             plt.savefig(os.path.join(plotpath,f'planck_comp.pdf'), bbox_inches='tight',dpi=300)
+    
+    def plot_Alens_box(self,save=False):
+        fname = os.path.join(datapath,'Alens_samps.pkl')
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('Data Loaded from file')
+        else:
+            
+            data = {}
+            rec1 = self.rec_nofg
+            rec2 = self.rec_fg1
+            rec3 = self.rec_fg2
+            data['nofg_samp'] = Alens_fit(rec1).get_samples().reshape(-1)
+            data['fg1_samp'] = Alens_fit(rec2).get_samples().reshape(-1)
+            data['fg2_samp'] = Alens_fit(rec3).get_samples().reshape(-1)
+            pl.dump(data,open(fname,'wb'))
+            print('Data Saved to file')
+
+        nofg_samp = data['nofg_samp']
+        fg1_samp = data['fg1_samp']
+        fg2_samp = data['fg2_samp']
+        data_to_plot = [nofg_samp, fg1_samp, fg2_samp]
+        labels = ['No FG', 's0d0', 's1d1']
+
+        plt.figure(figsize=(6, 6))
+        sns.boxplot(data=data_to_plot)
+        plt.xticks(range(len(labels)),labels,fontsize=15)
+        plt.ylabel('$A_{\mathrm{lens}}$',fontsize=15)
+        plt.axhline(1,color='r',ls='--',lw=3)
+        plt.yticks(fontsize=15)
+        if save:
+            plt.savefig(os.path.join(plotpath,f'Alens_box.pdf'), bbox_inches='tight',dpi=300)
+    
+    
+    
+    def plot_KS_pvalue(self,save=False):
+        fname = os.path.join(plotpath,'pvalue.pdf')
+        pvalue = pl.load(open(os.path.join(datapath,'pvalue.pkl'),'rb'))
+        s0d0 = pvalue['s0d0']
+        s1d1 = pvalue['s1d1']
+        B = pvalue['b']
+        plt.figure(figsize=(6,6))
+        plt.plot(B,s0d0,label='s0d0',marker='o',c='C10')
+        plt.plot(B,s1d1,label='s1d1',marker='o',c='C3')
+        plt.axhline(0.05,color='k',ls='--',label='0.05',lw=3)
+        plt.legend(fontsize=15)
+        plt.ylabel('$p$-value',fontsize=15)
+        plt.xlabel('$\ell$',fontsize=15)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
+        if save:
+            plt.savefig(fname, bbox_inches='tight',dpi=300)
+    
+    def plot_mismatching_alens(self,save=False,do_MC=False):
+        fname = os.path.join(datapath,f'mismatch_samples{do_MC}.pkl')
+        if os.path.exists(fname):
+            data = pl.load(open(fname,'rb'))
+            print('Data Loaded from file')
+        else:
+            rec1 = self.rec_nofg
+            rec2 = self.rec_fg1
+            rec3 = self.rec_fg2
+            data ={}
+            data['nofg'] = crazymix(rec3,rec1,100,do_MC).get_samples().reshape(-1)
+            data['fg1'] = crazymix(rec3,rec2,100,do_MC).get_samples().reshape(-1)
+            data['fg2'] = crazymix(rec3,rec3,100,do_MC).get_samples().reshape(-1)
+            pl.dump(data,open(fname,'wb'))
+            print('Data Saved to file')
+
+        snofg = data['nofg']
+        sfg1 = data['fg1']
+        sfg2 = data['fg2']
+
+        smm1=np.mean(snofg)
+        smm2=np.mean(sfg1)
+        smm3=np.mean(sfg2)
+        
+        plt.figure(figsize=(8,6))
+        plt.plot(*find_density(snofg),lw=3,label='No FG')
+        plt.plot(*find_density(sfg1),lw=3,label='s0d0')
+        plt.plot(*find_density(sfg2),lw=3,label='s1d1')
+        plt.text(smm1-.013,1.02,f"{smm1:.2f}",fontsize=15)
+        plt.text(smm2-.013,1.02,f"{smm2:.2f}",fontsize=15)
+        plt.text(smm3-.013,1.02,f"{smm3:.2f}",fontsize=15)
+        plt.xlabel('$A_\mathrm{lens}$',fontsize=15)
+        plt.ylim(0,1.2)
+        plt.legend(fontsize=15,loc='lower right')
+        plt.xticks(fontsize=15)
+        plt.yticks([])
+        if save:
+            plt.savefig(os.path.join(plotpath,f'MM_alens{do_MC}.pdf'), bbox_inches='tight',dpi=300)
+
+
+
+
+
+
 class snrStat:
     def __init__(self,fg0=None,fg1=None,fg2=None):
         self.fg0 = fg0
@@ -519,3 +695,5 @@ class snrStat:
         print('NOFG :',self.fg0.snr_iswphi())
         print('s0d0 :',self.fg1.snr_iswphi())
         print('s1d1 :',self.fg2.snr_iswphi())
+
+

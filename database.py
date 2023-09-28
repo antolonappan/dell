@@ -76,6 +76,7 @@ class Surveys:
     def __init__(self,database='surveys.pkl',verbose=False):
         dirpath = os.path.dirname(os.path.realpath(__file__))
         database = os.path.join(dirpath,'Data',database)
+        self.datafile = database
         self.database = pl.load(open(database,'rb'))
         self.tables = self.database.keys()
         if verbose:
@@ -93,4 +94,15 @@ class Surveys:
         if table not in self.tables:
             raise ValueError(f"{table} not in {self.tables}")
         return pd.DataFrame.from_dict(self.database[table])
+    
+    def add_table_dataframe(self,table,name):
+        if name not in self.database.keys():
+            print('the table not found')
+            assert type(table) == dict
+            self.database[name] = table
+            pl.dump(self.database,open(self.datafile,'wb'))
+            print("table added")
+        else:
+            print("table already exist")
+        
 

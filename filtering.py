@@ -8,6 +8,7 @@ import healpy as hp
 import curvedsky as cs
 from utils import cli
 from utils import ini_full
+from tqdm import tqdm
 
 from simulation import SimExperimentFG
 
@@ -147,7 +148,7 @@ class Filtering:
                 stat_file = os.path.join(self.lib_dir,'test_stat.txt')
 
             E,B = cs.cninv.cnfilter_freq(2,1,self.nside,self.lmax,self.cl_len[1:3,:],
-                                        self.Bl, self.ninv,QU,chn=1,itns=iterations,
+                                        self.Bl, self.ninv,QU,chn=1,itns=iterations,filter="",
                                         eps=[1e-5],ro=10,inl=self.NL,stat=stat_file)
             if not test:
                 pl.dump((E,B),open(fname,'wb'))
@@ -179,13 +180,22 @@ class Filtering:
         E, B = self.cinv_EB(idx)
         pass
 
-    def run_job(self):
+    def run_job_mpi(self):
         """
         MPI job for filtering
         """
         job = np.arange(mpi.size)
         for i in job[mpi.rank::mpi.size]:
             eb = self.cinv_EB(i)
+
+    def run_job(self):
+        """
+        MPI job for filtering
+        """
+        jobs = np.arange(self.sim_lib.nsim)
+        for i in tqdm(jobs, desc='Cinv filtering', unit='sim'):
+            eb = self.cinv_EB(i)
+            del eb
 
 if __name__ == '__main__':
     import argparse
