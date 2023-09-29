@@ -159,11 +159,11 @@ class Planck:
     def __init__(self):
         datadir = '../Data/planck/'
         MV = np.loadtxt(datadir+'mv_nlkk.dat').T
-        self.MV = {'L':MV[0],'N':MV[1],'SN':MV[2]}
+        self.MV = {'L':MV[0],'N':MV[1]*(2/np.pi),'SN':MV[2]}
         PP = np.loadtxt(datadir+'pp_nlkk.dat').T
-        self.PP = {'L':PP[0],'N':PP[1],'SN':PP[2]}
+        self.PP = {'L':PP[0],'N':PP[1]*(2/np.pi),'SN':PP[2]}
         TT = np.loadtxt(datadir+'tt_nlkk.dat').T
-        self.TT = {'L':TT[0],'N':TT[1],'SN':TT[2]}
+        self.TT = {'L':TT[0],'N':TT[1]*(2/np.pi),'SN':TT[2]}
 
 class simStat:
     
@@ -416,18 +416,18 @@ class recStat:
         r1,r2 = rcomb[which]
         res = 5
         xsize=200
-        gs = gridspec.GridSpec(1, 3,wspace=0.1)
-        plt.figure(figsize=(20,20))
+        gs = gridspec.GridSpec(1, 2,wspace=0.1)
+        plt.figure(figsize=(15,15))
         ax = plt.subplot(gs[0, 0])
         hp.gnomview(inputk,reso=res,rot=[r1,r2],norm='hist',title='',xsize=xsize,notext=True,hold=True)
         plt.title('$\kappa_{LM}^\\texttt{Input}$',fontsize=20)
-        plt.text(-.16,-.135,"$Resolution = 5^\prime/pixel, 200\\times200\;pixel$",rotation=90,fontsize=18)
+        #plt.text(-.16,-.135,"$Resolution = 5^\prime/pixel, 200\\times200\;pixel$",rotation=90,fontsize=18)
         ax = plt.subplot(gs[0, 1])
         hp.gnomview(output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
         plt.title('$\kappa_{LM}^\\texttt{Output}$',fontsize=18)
-        ax = plt.subplot(gs[0, 2])
-        hp.gnomview(inputk-output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
-        plt.title('$\kappa_{LM}^\\texttt{Input-Output}$',fontsize=18)
+        #ax = plt.subplot(gs[0, 2])
+        #hp.gnomview(inputk-output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
+        #plt.title('$\kappa_{LM}^\\texttt{Input-Output}$',fontsize=18)
         if save:
             plt.savefig(os.path.join(plotpath,'recMaps.pdf'), bbox_inches='tight',dpi=300)
 
@@ -560,8 +560,8 @@ class recStat:
         plt.loglog(data['fid'],label='Signal',c='grey',lw=3)
         plt.xlim(2,600)
         plt.ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} N_L^{(0),MC}$',fontsize=25)
-        plt.xticks(fontsize=15)
-        plt.yticks(fontsize=15)
+        plt.xticks(fontsize=25)
+        plt.yticks(fontsize=25)
         plt.xlabel('L',fontsize=25)
         plt.legend(ncol=2, fontsize=20)
         if save:
