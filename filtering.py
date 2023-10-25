@@ -165,12 +165,16 @@ class Filtering:
         ----------
         idx : int : index of the simulation
         """
-        _,B = self.cinv_EB(idx)
-        _,_,nb = self.sim_lib.noise_spectra(self.sim_lib.nsim)
+        E,B = self.cinv_EB(idx)
+        _,ne,nb = self.sim_lib.noise_spectra(self.sim_lib.nsim)
+        cle = cs.utils.alm2cl(self.lmax,E)
         clb = cs.utils.alm2cl(self.lmax,B)
         plt.figure(figsize=(8,8))
+        plt.loglog(cle,label='E')
         plt.loglog(clb,label='B')
+        plt.loglog(1/(self.cl_len[1,:]  + ne))
         plt.loglog(1/(self.cl_len[2,:]  + nb))
+        plt.legend()
 
     def wiener_EB(self,idx):
         """

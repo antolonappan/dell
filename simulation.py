@@ -115,7 +115,10 @@ class SimExperimentFG:
         Get the CMB map of the given simulation
         """
         fname = os.path.join(self.infolder,f"cmb_sims_{idx:04d}.fits")
-        return hp.ud_grade(hp.read_map(fname,(0,1,2)),self.dnside) # type: ignore
+        alms = hp.map2alm(hp.read_map(fname,(0,1,2)),lmax=self.lmax)
+        maps = hp.alm2map(alms,self.dnside)
+        del alms
+        return maps
 
     def get_fg(self,v):
         """
