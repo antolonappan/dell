@@ -236,7 +236,7 @@ class Reconstruction:
             pl.dump(n0cl,open(fname,'wb'))
             return n0cl
 
-    def MCN0(self,n=400):
+    def MCN0(self,n=500):
         """
         Calculate the Monte Carlo N0 bias
 
