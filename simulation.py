@@ -136,9 +136,11 @@ class SimExperimentFG:
             V = np.array(self.table.frequency)
             Beam = np.array(self.table.fwhm)
             maps = []
+            cmb = self.get_cmb(idx)
             for v,b in tqdm(zip(V,Beam),desc="Making maps",unit='Freq',leave=True):
-                maps.append(hp.smoothing(self.get_cmb(idx) + self.get_fg(v), fwhm=np.radians(b/60)))
+                maps.append(hp.smoothing(cmb + self.get_fg(v), fwhm=np.radians(b/60)))
             pl.dump(maps,open(fname,'wb'))
+            del cmb
         else:
             maps = pl.load(open(fname,'rb'))
         return np.array(maps)
@@ -152,9 +154,11 @@ class SimExperimentFG:
         if not os.path.exists(fname):
             Beam = np.array(self.table.fwhm)
             maps = []
+            cmb = self.get_cmb(idx)
             for b in tqdm(Beam,desc="Making maps",unit='Freq'):
-                maps.append(hp.smoothing(self.get_cmb(idx), fwhm=np.radians(b/60)))
+                maps.append(hp.smoothing(cmb, fwhm=np.radians(b/60)))
             pl.dump(maps,open(fname,'wb'))
+            del cmb
         else:
             maps = pl.load(open(fname,'rb'))
         return np.array(maps)
@@ -280,6 +284,7 @@ class SimExperimentFG:
         for i in jobs[mpi.rank::mpi.size]:
             Null = self.get_cmb_alms(i)
             del Null
+        mpi.barrier()
 
     def run_job(self):
         job = np.arange(self.nsim)
