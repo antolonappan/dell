@@ -19,7 +19,7 @@ $f_{sky} = 0.9$ : *s1d1_fsky_0p9_Dl_MCN1.txt*
 
 
 ## Lensing potential
-Binned angular power spectrum for the foreground model `s1d1`
+Binned angular power spectrum of the lensing potential.
 
 $f_{sky} = 0.9$ : *binned_DL_phi_s1d1_fsky_0p9.txt*
 
