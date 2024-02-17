@@ -15,7 +15,8 @@ plotpath = '../Notebooks/plots'
 
 os.makedirs(datapath,exist_ok=True)
 os.makedirs(plotpath,exist_ok=True)
-
+tex = False
+plt.rcParams['text.usetex']=False
 if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['text.usetex']=True
     plt.rcParams['ytick.minor.visible'] =True
@@ -47,6 +48,7 @@ if socket.gethostname() == 'vmi401751.contaboserver.net':
     plt.rcParams['xtick.minor.pad']='10'
     plt.rcParams['hatch.color'] = 'black'
     plt.rcParams['lines.dashed_pattern']=3, 1.5
+    tex = True
     
 def find_density(arr):
     density = gaussian_kde(arr,.3)
@@ -252,7 +254,7 @@ class simStat:
         ax1.loglog(fg2_rnl_e ,label=f"{self.fg2}",c='g',lw=2)
         ax1.legend(fontsize=20)
         ax1.set_xlabel("$\ell$",fontsize=25)
-        ax1.set_ylabel("$\\frac{1}{b_\ell^2}\\left(C_\ell^{fg_{res}} + N_\ell \\right)$ [$\mu K^2$]",fontsize=25)
+        ax1.set_ylabel("$\\left(C_\ell^{fg_{res}} + N_\ell \\right)/{b_\ell^2}\;$  [$\mu \\mathrm{K}^2$]",fontsize=25)
         ax1.set_xlim(2,600)
         ax1.set_ylim(1e-6,1e-1)
 
@@ -330,13 +332,13 @@ class recStat:
         fid = data['fid']
 
         fig, axs = plt.subplots(2, 1,figsize=(9,9), gridspec_kw={'height_ratios': [4, 1]}, sharex=True)
-        plt.setp(axs, xlim=(2,690))
+        plt.setp(axs, xlim=(2,600))
         fig.subplots_adjust(hspace=0)
 
         axs[0].semilogy(data['fidm'],label='Signal',c='grey',lw=2)
-        axs[0].semilogy(data['NOFG-MCN0'], c='g', label="$\\textbf{No FG}$",lw=2)
-        axs[0].semilogy(data['fg1-MCN0'], c='b', label="$\\textbf{s0d0}$",lw=2)
-        axs[0].semilogy(data['fg2-MCN0'], c='r', label="$\\textbf{s1d1}$",lw=2)
+        axs[0].semilogy(data['NOFG-MCN0'], c='g', label="$\\textbf{No FG}$" if tex else 'No FG',lw=2)
+        axs[0].semilogy(data['fg1-MCN0'], c='b', label="$\\textbf{s0d0}$" if tex else 's0d0',lw=2)
+        axs[0].semilogy(data['fg2-MCN0'], c='r', label="$\\textbf{s1d1}$" if tex else 's1d1',lw=2)
 
         axs[0].semilogy(data['NOFG-MCER']+(data['fidm']/100),c='g',ls=':',lw=3)
         axs[0].semilogy(data['fg2-MCER']+(data['fidm']/100),c='r',ls=':',lw=3)
@@ -368,8 +370,8 @@ class recStat:
 
 
 
-        axs[1].errorbar(data['B']+shift,fg2_cl.mean(axis=0)/fid,yerr=fg2_cl.std(axis=0)/fid,label=f'{self.fg2}',c='r',fmt='o')
-        axs[1].errorbar(data['B'],nofg_cl.mean(axis=0)/fid,yerr=nofg_cl.std(axis=0)/fid,label='NOFG',c='g',fmt='o')
+        axs[1].errorbar(data['B']+shift,fg2_cl.mean(axis=0)/(fid),yerr=fg2_cl.std(axis=0)/(fid),label=f'{self.fg2}',c='r',fmt='o')
+        axs[1].errorbar(data['B'],nofg_cl.mean(axis=0)/(fid),yerr=nofg_cl.std(axis=0)/(fid),label='NOFG',c='g',fmt='o')
         axs[1].set_ylim(-0.1,2.3)
         #axs[1].legend(ncol=2, fontsize=15,loc='upper right')
         axs[1].axhline(1,c='k')
@@ -419,12 +421,14 @@ class recStat:
         gs = gridspec.GridSpec(1, 2,wspace=0.1)
         plt.figure(figsize=(15,15))
         ax = plt.subplot(gs[0, 0])
-        hp.gnomview(inputk,reso=res,rot=[r1,r2],norm='hist',title='',xsize=xsize,notext=True,hold=True)
-        plt.title('$\kappa_{LM}^\\texttt{Input}$',fontsize=20)
+        hp.gnomview(inputk,reso=res,rot=[r1,r2],norm='hist',title='',xsize=xsize,notext=True,hold=True,format='%.1g')
+        #plt.title('$\kappa_{LM}^\\texttt{Input}$',fontsize=20)
+        plt.title('$\\texttt{Input}$',fontsize=20)
         #plt.text(-.16,-.135,"$Resolution = 5^\prime/pixel, 200\\times200\;pixel$",rotation=90,fontsize=18)
         ax = plt.subplot(gs[0, 1])
-        hp.gnomview(output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
-        plt.title('$\kappa_{LM}^\\texttt{Output}$',fontsize=18)
+        hp.gnomview(output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True,format='%.1g')
+        #plt.title('$\kappa_{LM}^\\texttt{Output}$',fontsize=18)
+        plt.title('$\\texttt{Output}$',fontsize=20)
         #ax = plt.subplot(gs[0, 2])
         #hp.gnomview(inputk-output,reso=res,rot=[r1,r2],norm='hist',xsize=xsize,title='Output',notext=True,hold=True)
         #plt.title('$\kappa_{LM}^\\texttt{Input-Output}$',fontsize=18)
@@ -483,35 +487,54 @@ class recStat:
             plt.savefig(os.path.join(plotpath,'SNR_impact_v2.pdf'), bbox_inches='tight',dpi=300)      
     
     def plot_qcl_stat(self,save=False):
-        fname = os.path.join(datapath,'recQCL.pkl')
+        fname = os.path.join(datapath,f'recQCL.pkl')
         if os.path.exists(fname):
             data = pl.load(open(fname,'rb'))
             print('Data Loaded from file')
         else:
             data = {}
-            data['stat']= self.rec_fg3.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
-            data['fid'] = self.rec_fg3.cl_pp*self.rec_fg3.Lfac
-            data['mcn0'] = self.rec_fg3.Lfac*(self.rec_fg3.MCN0()/self.rec_fg3.response_mean()**2 )
-            data['mcn1'] = self.rec_fg3.Lfac*self.rec_fg3.N1
-            data['mf'] = self.rec_fg3.Lfac*self.rec_fg3.mean_field_cl()
-            data['B'] = self.rec_fg3.B
+            fgobject = self.rec_fg2
+            fgobject2 = self.rec_fg3
+            data['stat']= fgobject.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
+            data['stat2'] = fgobject2.get_qcl_wR_stat(n=400,n1=True,rdn0=True)
+            data['fid'] = fgobject.cl_pp*fgobject.Lfac
+            data['mcn0'] = fgobject.Lfac*(fgobject.MCN0()/fgobject.response_mean()**2 )
+            data['mcn02'] = fgobject2.Lfac*(fgobject2.MCN0()/fgobject2.response_mean()**2 )
+            data['mcn1'] = fgobject.Lfac*fgobject.N1
+            data['mcn12'] = fgobject2.Lfac*fgobject2.N1
+            data['mf'] = fgobject.Lfac*fgobject.mean_field_cl()
+            data['mf2'] = fgobject2.Lfac*fgobject2.mean_field_cl()
+            data['B'] = fgobject.B
             pl.dump(data,open(fname,'wb'))
             print('Data Saved to file')
 
         
         stat = data['stat']
         plt.figure(figsize=(8,7))
-        plt.loglog(data['fid'],label='$\\texttt{Signal}$',c='grey',lw=2)
-        plt.loglog(data['mcn0'],label='$N_L^{(0)}$',c='r')
-        plt.loglog(data['mcn1'],label='$N_L^{(1)}$',c='g')
-        plt.loglog(data['mf'],label='$C_L^{MF}$',c='b')
-        plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=6,capsize=2,label='$\\texttt{Reconstructed}$')
+        plt.loglog(data['fid'],label='$\\texttt{Signal}$' if tex else 'Signal',c='grey',lw=2)
+        plt.loglog(data['mcn02'],label='$N_L^{(0)}$',c='r')
+        plt.loglog(data['mcn0'],c='r',ls='--')
+        plt.loglog(data['mcn12'],label='$N_L^{(1)}$',c='g')
+        plt.loglog(data['mcn1'],c='g',ls='--')
+        plt.loglog(data['mf2'],label='$C_L^{MF}$',c='b')
+        plt.loglog(data['mf'],c='b',ls='--')
+        plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=4,capsize=2,label='$\\texttt{Reconstructed}(f_{sky}=0.8)$' if tex else 'Reconstructed$(f_{sky}=0.8)$')
+        plt.errorbar(data['B']+.1,data['stat2'].mean(axis=0),yerr=data['stat2'].std(axis=0),fmt='o',c='orange',ms=6,capsize=2,label='$\\texttt{Reconstructed}(f_{sky}=0.8)$' if tex else 'Reconstructed$(f_{sky}=0.9)$')
         plt.xlim(2,600)
-        plt.legend(ncol=2, fontsize=20)
+        legend1 = plt.legend(ncol=2, fontsize=18)
         plt.xlabel('$L$',fontsize=25)
         plt.ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} C_L^{\phi\phi}$',fontsize=25)
         plt.xticks(fontsize=20)
         plt.yticks(fontsize=20)
+
+        legend2_elements = [
+            plt.Line2D([0], [0], color='black', lw=2, label="$f_{sky}=0.9$"),
+            plt.Line2D([0], [0], color='black', lw=2, linestyle='--', label="$f_{sky}=0.8$")
+        ]
+        legend2 = plt.legend(handles=legend2_elements, loc='lower right', fontsize=18, frameon=False)
+        plt.gca().add_artist(legend1)
+        plt.gca().add_artist(legend2)
+
         if save:
             plt.savefig(os.path.join(plotpath,'recQCL.pdf'), bbox_inches='tight',dpi=300)
     
@@ -562,7 +585,7 @@ class recStat:
         plt.ylabel('$\\frac{L^2 (L + 1)^2}{2\pi} N_L^{(0),MC}$',fontsize=25)
         plt.xticks(fontsize=25)
         plt.yticks(fontsize=25)
-        plt.xlabel('L',fontsize=25)
+        plt.xlabel('$L$',fontsize=25)
         plt.legend(ncol=2, fontsize=20)
         if save:
              plt.savefig(os.path.join(plotpath,f'planck_comp.pdf'), bbox_inches='tight',dpi=300)
@@ -651,10 +674,12 @@ class recStat:
         plt.text(smm2-.013,1.02,f"{smm2:.2f}",fontsize=25)
         plt.text(smm3-.013,1.02,f"{smm3:.2f}",fontsize=25)
         plt.xlabel('$A_\mathrm{lens}$',fontsize=25)
+        plt.ylabel('$\mathrm{Normalized}\;\;P(A_\mathrm{lens})$',fontsize=25)
         plt.ylim(0,1.2)
         plt.legend(fontsize=18,loc='lower center',bbox_to_anchor=(0.6, 0.4))
         plt.xticks(fontsize=25)
         plt.yticks([])
+        print(smm1,smm2,smm3)
         if save:
             plt.savefig(os.path.join(plotpath,f'MM_alens{do_MC}.pdf'), bbox_inches='tight',dpi=300)
 
