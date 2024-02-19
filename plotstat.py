@@ -101,12 +101,13 @@ class Alens_fit:
 
 class crazymix:
 
-    def __init__(self,s1d1,other,idx=0,do_MC=False):
+    def __init__(self,s1d1,other,idx=0,do_MC=False,use_off_diag=True):
         self.s1d1 = s1d1
         self.other = other
         self.idx = idx
         self.B = self.s1d1.B
         self.do_MC = do_MC
+        self.use_off_diag = use_off_diag
         self.fiducial = self.other.bin_cell(self.other.cl_pp*self.other.Lfac)
         self.icov = self.icov_()
         self.spectra = self.get_spectra()
@@ -129,7 +130,11 @@ class crazymix:
         return self.other.bin_cell((cl-correction)*self.s1d1.Lfac)
 
     def icov_(self):
-        return np.linalg.inv(np.cov(self.other.get_qcl_wR_stat().T))
+        spe_arr = self.other.get_qcl_wR_stat()
+        cov = np.cov(spe_arr.T)
+        if not self.use_off_diag:
+            cov = np.diag(np.diag(cov))
+        return np.linalg.inv(cov)
 
     def chi_sq(self,alens):
         dcl = self.spectra - (alens*self.fiducial)
@@ -149,11 +154,11 @@ class crazymix:
             return -np.inf
         return lp + self.log_likelihood(theta)
 
-    def get_samples(self):
+    def get_samples(self,progress=True):
         pos = [1] + 1e-1 * np.random.randn(64, 1)
         nwalkers,ndim = pos.shape
         sampler = emcee.EnsembleSampler(nwalkers,ndim,self.log_probability)
-        sampler.run_mcmc(pos, 4000, progress=True)
+        sampler.run_mcmc(pos, 4000, progress=progress)
         flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
         return flat_samples
 class Planck:
@@ -519,7 +524,7 @@ class recStat:
         plt.loglog(data['mf2'],label='$C_L^{MF}$',c='b')
         plt.loglog(data['mf'],c='b',ls='--')
         plt.errorbar(data['B'],stat.mean(axis=0),yerr=stat.std(axis=0),fmt='o',c='k',ms=5,capsize=2,label='$\\texttt{Reconstructed}(f_{sky}=0.8)$' if tex else 'Reconstructed$(f_{sky}=0.8)$')
-        plt.errorbar(data['B']+.1,data['stat2'].mean(axis=0),yerr=data['stat2'].std(axis=0),fmt='o',c='C11',ms=5,capsize=2,label='$\\texttt{Reconstructed}(f_{sky}=0.8)$' if tex else 'Reconstructed$(f_{sky}=0.9)$')
+        plt.errorbar(data['B']+.1,data['stat2'].mean(axis=0),yerr=data['stat2'].std(axis=0),fmt='o',c='C11',ms=5,capsize=2,label='$\\texttt{Reconstructed}(f_{sky}=0.9)$' if tex else 'Reconstructed$(f_{sky}=0.9)$')
         plt.xlim(2,600)
         legend1 = plt.legend(ncol=2, fontsize=18)
         plt.xlabel('$L$',fontsize=25)
