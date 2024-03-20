@@ -632,18 +632,26 @@ class recStat:
     def plot_KS_pvalue(self,save=False):
         fname = os.path.join(plotpath,'pvalue.pdf')
         pvalue = pl.load(open(os.path.join(datapath,'pvalue.pkl'),'rb'))
-        s0d0 = pvalue['s0d0']
-        s1d1 = pvalue['s1d1']
+        s0d0 = np.array(pvalue['s0d0'])
+        s1d1 = np.array(pvalue['s1d1'])
         B = pvalue['b']
-        plt.figure(figsize=(6,6))
-        plt.plot(B,s0d0,label='$\\textbf{s0d0}$',marker='o',c='C10')
-        plt.plot(B,s1d1,label='$\\textbf{s1d1}$',marker='o',c='C3')
-        plt.axhline(0.05,color='k',ls='--',label='$0.05$',lw=3)
-        plt.legend(fontsize=15)
-        plt.ylabel('$\\mathrm{KS} \;\; p-\\mathrm{value}$',fontsize=25)
-        plt.xlabel('$L$',fontsize=25)
-        plt.xticks(fontsize=25)
-        plt.yticks(fontsize=25)
+        fig, ax1 = plt.subplots(figsize=(8,8))
+        ax1.axhline(0.05,color='k',ls='-',label='0.05',lw=2)
+        ax1.plot(B,s0d0,label='$\\textbf{s0d0}$',marker='o',c='C10',ls='--',lw=1,markersize=10)
+        ax1.plot(B,s1d1,label='$\\textbf{s1d1}$',marker='o',c='C3',ls='--',lw=1,markersize=10)
+        ax1.legend(fontsize=15)
+        ax1.set_ylabel('$\\mathrm{KS} \;\; p-\\mathrm{value}$',fontsize=25)
+        ax1.set_xlabel('$L$',fontsize=25)
+        plt.setp(ax1.get_xticklabels(), fontsize=25)
+        plt.setp(ax1.get_yticklabels(), fontsize=25)
+
+        ax2 = fig.add_axes([0.55, 0.38, 0.3, 0.3]) # Example position
+        ax2.hist(s0d0[B<400], bins=3,  alpha=0.5, color='C10')
+        ax2.hist(s1d1[B<400], bins=3, alpha=0.5, color='C3')
+        ax2.set_xlabel('$p-\\mathrm{value}$', fontsize=15)
+        ax2.set_ylabel('$\\mathrm{Count}$', fontsize=15)
+        ax2.set_title('$0 < L < 400$',fontsize=15)
+        ax2.tick_params(axis='both', which='major', labelsize=15)
         if save:
             plt.savefig(fname, bbox_inches='tight',dpi=300)
     
